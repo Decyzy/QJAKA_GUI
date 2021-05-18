@@ -271,18 +271,12 @@ void MainWindow::onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled) {
     ui->enableBt->setEnabled(poweredOn);
 }
 
-
-
-
-
-void MainWindow::on_abortBt_clicked()
-{
+void MainWindow::on_abortBt_clicked() {
 
 }
 
 
-void MainWindow::on_collisionRecoverBt_clicked()
-{
+void MainWindow::on_collisionRecoverBt_clicked() {
 
 }
 

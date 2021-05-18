@@ -44,6 +44,10 @@ private slots:
     void on_enableBt_clicked();
 
 
+    void on_abortBt_clicked();
+
+    void on_collisionRecoverBt_clicked();
+
 private:
     Ui::MainWindow *ui;
 
