@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     for (int i = 0; i < 6; ++i) {
         for (int j = 0; j < 2; ++j) {
             auto *p = new QPushButton();
+            p->setEnabled(false);
             ui->jValGridLayout->addWidget(p, i + 1, j + 6);
             p->setText(j == 0 ? "+" : "-");
             p->setMinimumWidth(48);
@@ -79,6 +80,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(&rm, &RobotManager::updateStatusSignal, this, &MainWindow::onUpdateStatus);
     connect(&rm, &RobotManager::errorSignal, this, &MainWindow::showErrorBox);
     connect(&rm, &RobotManager::updateBtSignal, this, &MainWindow::onUpdateBt);
+    connect(&rm, &RobotManager::busySignal, this, &MainWindow::onBusy);
+
 }
 
 MainWindow::~MainWindow() {
@@ -244,7 +247,7 @@ void MainWindow::onUpdateStatus(bool isAll) {
         ui->tempLabel->setText(QString::number(status.robot_monitor_data.cabTemperature, 'f', 1));
         ui->avgPLabel->setText(QString::number(status.robot_monitor_data.robotAveragePower, 'f', 1));
         ui->avgALabel->setText(QString::number(status.robot_monitor_data.robotAverageCurrent, 'f', 1));
-        ui->rapidLabel->setText(QString::number(status.rapidrate));
+        ui->rapidLabel->setText(QString::number(status.rapidrate, 'f', 1));
 
         setLabelStatus(ui->powerOnLabel, status.powered_on == 0 ? STATUS_RED : STATUS_GREEN);
         setLabelStatus(ui->enableLabel, status.enabled == 0 ? STATUS_RED : STATUS_GREEN);
@@ -269,14 +272,40 @@ void MainWindow::onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled) {
     ui->powerOnBt->setEnabled(true);
     ui->enableBt->setText(servoEnabled ? "disable" : "enable");
     ui->enableBt->setEnabled(poweredOn);
+
+    if (servoEnabled) {
+        ui->abortBt->setEnabled(true);
+        ui->collisionRecoverBt->setEnabled(true);
+        ui->setCurrentBt->setEnabled(true);
+        ui->goBt->setEnabled(true);
+        for (auto &row:jointMoveBtList) {
+            for (auto p: row) {
+                p->setEnabled(true);
+            }
+        }
+    } else {
+        ui->abortBt->setEnabled(false);
+        ui->collisionRecoverBt->setEnabled(false);
+        ui->setCurrentBt->setEnabled(false);
+        ui->goBt->setEnabled(false);
+        for (auto &row:jointMoveBtList) {
+            for (auto p: row) {
+                p->setEnabled(false);
+            }
+        }
+    }
 }
 
 void MainWindow::on_abortBt_clicked() {
-
+    rm.motion_abort();
 }
 
 
 void MainWindow::on_collisionRecoverBt_clicked() {
+    rm.collision_recover();
+}
 
+void MainWindow::onBusy() {
+    QMessageBox::warning(this, "Warning", "上一任务尚未结束", QMessageBox::Ok);
 }
 

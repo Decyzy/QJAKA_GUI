@@ -26,13 +26,21 @@ private:
     std::atomic_bool m_isLogin;
     RobotStatus m_status;
 
-    void m_sleepMilliseconds(long long milliseconds=500) {
+    double m_targetJointVal[6];
+    double m_startJointVal[6];
+    std::chrono::high_resolution_clock::time_point m_startTime;
+    std::chrono::milliseconds m_duration;
+    std::atomic<double> m_radPerSecond;
+    std::atomic_bool m_isInPos;
+
+    void m_sleepMilliseconds(long long milliseconds = 500) {
         std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
 
     }
 
 public:
-    VirtualRobot() : m_isLogin(false), m_status({}) {}
+    VirtualRobot() : m_isLogin(false), m_status({}), m_targetJointVal(), m_startJointVal(),
+                     m_duration(std::chrono::milliseconds::zero()), m_radPerSecond(0), m_isInPos(true) {}
 
     bool is_login() { return m_isLogin.load(); }
 
@@ -79,7 +87,35 @@ public:
         return ERR_SUCC;
     }
 
-    errno_t motion_abort() { return ERR_SUCC; }
+    errno_t motion_abort() {
+        m_sleepMilliseconds(1000);
+
+        return ERR_SUCC;
+    }
+
+    void set_spin_speed(double degreePerSpeed) {
+        m_radPerSecond.exchange(degreePerSpeed / 180.0 * M_PI);
+    }
+
+    errno_t joint_move(const JointValue *joint_pos, MoveMode move_mode) {
+        double maxDeltaAngle = 0;
+        if (move_mode == INCR) {
+            for (int i = 0; i < 6; ++i) {
+                m_targetJointVal[i] = m_status.joint_position[i] + joint_pos->jVal[i];
+                maxDeltaAngle = std::max(maxDeltaAngle, std::fabs(joint_pos->jVal[i]));
+            }
+        } else if (move_mode == ABS) {
+            for (int i = 0; i < 6; ++i) {
+                m_targetJointVal[i] = joint_pos->jVal[i];
+                maxDeltaAngle = std::max(maxDeltaAngle, std::fabs(m_status.joint_position[i] - m_targetJointVal[i]));
+            }
+        }
+        memcpy(m_startJointVal, m_status.joint_position, sizeof(m_startJointVal));
+        m_duration = std::chrono::milliseconds(int(maxDeltaAngle * 1000.0 / m_radPerSecond));
+        m_startTime = std::chrono::high_resolution_clock::now();
+        m_isInPos.exchange(false);
+        return ERR_SUCC;
+    }
 
     errno_t collision_recover() { return ERR_SUCC; }
 
@@ -104,8 +140,13 @@ Q_OBJECT
 private:
     std::thread m_getThread;
     std::thread m_setThread;
+    std::thread m_emergencyThread;
+
     std::atomic_bool m_hasNormalTask;
+    std::atomic_bool m_hasEmergencyTask;
     std::function<void(void)> m_normalTask;
+    std::function<void(void)> m_emergencyTask;
+
 
     VirtualRobot *m_pRobot;
     VirtualRobot m_virtualRobot;
@@ -125,6 +166,15 @@ private:
         }
     }
 
+    void m_addEmergencyTask(std::function<void(void)> &&func) {
+        if (m_hasEmergencyTask.load()) {
+            emit busySignal();
+        } else {
+            m_emergencyTask = func;
+            m_hasEmergencyTask.exchange(true);
+        }
+    }
+
 signals:
 
     void loginSignal(int errorCode, bool estoped, bool poweredOn, bool servoEnabled);
@@ -141,7 +191,8 @@ signals:
     void updateStatusSignal(bool isAll);
 
 public:
-    RobotManager() : m_hasNormalTask(false), m_isWillTerminate(false), m_isWillGetThreadTerminate(false), m_status({}) {
+    RobotManager() : m_hasNormalTask(false), m_hasEmergencyTask(false), m_isWillTerminate(false),
+                     m_isWillGetThreadTerminate(false), m_status({}) {
 
         m_errorDescMap[ERR_SUCC] = "调用成功";
         m_errorDescMap[ERR_FUCTION_CALL_ERROR] = "异常调用，调用接口异常，控制器不支持";
@@ -171,12 +222,26 @@ public:
             }
             std::cout << "m_setThread quit" << std::endl;
         });
+
+
+        m_emergencyThread = std::thread([&]() {
+            std::cout << "m_emergencyThread start" << std::endl;
+            while (!m_isWillTerminate.load()) {
+                if (m_hasEmergencyTask.load()) {
+                    m_emergencyTask();
+                    m_hasEmergencyTask.exchange(false);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            std::cout << "m_emergencyThread quit" << std::endl;
+        });
     }
 
     ~RobotManager() override {
         m_isWillTerminate.exchange(true);
         if (m_getThread.joinable()) m_getThread.join();
         if (m_setThread.joinable()) m_setThread.join();
+        if (m_emergencyThread.joinable()) m_emergencyThread.join();
     }
 
     void start_get_thread() {
@@ -266,6 +331,21 @@ public:
         m_addAsyncTask([&]() {
             auto res = m_pRobot->disable_robot();
             emit updateBtSignal(res, true, res != ERR_SUCC);
+        });
+    }
+
+    void motion_abort() {
+        m_addEmergencyTask([&]() {
+            auto res = m_pRobot->motion_abort();
+            emit errorSignal(res);
+            std::cout << "motion_abort end" << std::endl;
+        });
+    }
+
+    void collision_recover() {
+        m_addAsyncTask([&]() {
+            auto res = m_pRobot->collision_recover();
+            emit errorSignal(res);
         });
     }
 

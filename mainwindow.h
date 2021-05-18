@@ -37,6 +37,8 @@ private slots:
 
     void onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled);
 
+    void onBusy();
+
     void on_loginBt_clicked();
 
     void on_powerOnBt_clicked();
