@@ -36,6 +36,12 @@
         └── libz.a
     ```
 
+- robot_model：本仓库doc下zip压缩包，包含urdf和moveit配置例子
+  - `Zu7/urdf/jaka_macro.xacro`：添加了macro `prefix`，用以区分左右机械臂；
+  - `Zu7/urdf/jaka_dual.xacro`：双臂；
+  - `Zu7/urdf/jaka.urdf.xacro`：官方文件，单机械臂；
+  - `dual_moveit_config`：使用moveit配置助手，基于`Zu7/urdf/jaka_dual.xacro`生成的。
+
 ## 程序设计
 
 ### 机器人类 `VirtualRobot` 和 `RealRobot`
