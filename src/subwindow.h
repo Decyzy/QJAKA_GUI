@@ -10,24 +10,27 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QDebug>
+#include <QSignalMapper>
+#include <QDateTime>
 
 #include <vector>
 #include <unordered_map>
 
 #include "IPEdit.h"
-#include "robot.hpp"
+#include "robot_manager.hpp"
+
 
 QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
+namespace Ui { class SubWindow; }
 QT_END_NAMESPACE
 
-class MainWindow : public QMainWindow {
+class SubWindow : public QWidget {
 Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    SubWindow(ros::NodeHandle &nh, QWidget *parent = nullptr, const std::string &prefix = "unknown");
 
-    ~MainWindow();
+    ~SubWindow();
 
 private slots:
 
@@ -38,6 +41,10 @@ private slots:
     void onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled);
 
     void onBusy();
+
+    void onJointMoveBtClicked(int);
+
+    void onAddInfo(QString);
 
     void on_loginBt_clicked();
 
@@ -50,15 +57,43 @@ private slots:
 
     void on_collisionRecoverBt_clicked();
 
+    void on_setCurrentBt_clicked();
+
+    void on_goBt_clicked();
+
+    void on_clearInfoBt_clicked();
+
+    void on_rapidSpinBox_editingFinished();
+
+    void on_rapidSlider_valueChanged(int);
+
+    void on_rapidUpdateBt_clicked();
+
+    void on_robotCheckBox_toggled(bool);
+
+public:
+    RobotManager *rm;
+
 private:
-    Ui::MainWindow *ui;
+    Ui::SubWindow *ui;
 
     std::vector<QLabel *> jointInfoLabelList[6];
     std::vector<QPushButton *> jointMoveBtList[6];
-    std::vector<QDoubleSpinBox *> jointMoveSpinList[6];
+    std::vector<QDoubleSpinBox *> jointMoveSpinList;
     std::vector<QLabel *> posInfoLabelList;
     IPEdit *ipEdit;
-    RobotManager rm;
+    ros::NodeHandle &nh;
+    VirtualRobot virtualRobot;
+    RealRobot realRobot;
+    RobotManager virtualRM;
+    RobotManager realRM;
+
+
+    QLabel *motionControlLabel;
+
+    double curJVal[6]{};
+
+    QSignalMapper *signalMapper;
 
     enum emStatusType {
         STATUS_GREEN, STATUS_RED, STATUS_ORANGE, STATUS_UNKNOWN, STATUS_GRAY
@@ -71,6 +106,10 @@ private:
     void clearAllStatus();
 
     void onUpdateStatus(bool isAll);
+
+    void updateRMConnection(RobotManager *old, RobotManager *cur);
+
+    int jointUpdateCount = 0;
 
 };
 

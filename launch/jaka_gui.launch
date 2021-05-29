@@ -1,0 +1,15 @@
+<launch>
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find Zu7)/urdf/jaka_dual.xacro"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find qjaka_gui)/config/jaka_gui.rviz" required="true"/>
+
+    <!-- 运行robot_state_publisher节点，发布tf  -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+    <!-- joint_state_publisher -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+        <rosparam param="source_list">[/jaka_joint_states]</rosparam>
+    </node>
+    <node pkg="qjaka_gui" type="qjaka_gui" name="qjaka_gui" output="screen">
+        <param name="left_ip" value="192.168.1.103"/>
+        <param name="right_ip" value="192.168.1.102"/>
+    </node>
+</launch>
