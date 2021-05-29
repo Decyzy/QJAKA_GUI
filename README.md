@@ -42,6 +42,12 @@
   - `Zu7/urdf/jaka.urdf.xacro`：官方文件，单机械臂；
   - `dual_moveit_config`：使用moveit配置助手，基于`Zu7/urdf/jaka_dual.xacro`生成的。
 
+## 测试
+
+```bash
+roslaunch qjaka_gui test_trajectory.launch
+```
+
 ## 程序设计
 
 ### 机器人类 `VirtualRobot` 和 `RealRobot`
