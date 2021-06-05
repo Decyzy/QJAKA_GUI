@@ -9,6 +9,7 @@
         <rosparam param="source_list">[/jaka_joint_states]</rosparam>
     </node>
     <node pkg="qjaka_gui" type="qjaka_gui" name="qjaka_gui" output="screen">
+<!--        <remap from="jaka_joint_states" to="joint_states"/>-->
         <param name="left_ip" value="192.168.1.103"/>
         <param name="right_ip" value="192.168.1.102"/>
     </node>

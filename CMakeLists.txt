@@ -22,6 +22,8 @@ find_package(catkin REQUIRED COMPONENTS
     std_msgs
     moveit_msgs
     message_generation
+    tf2
+    tf2_ros
 )
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)

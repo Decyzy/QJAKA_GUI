@@ -6,7 +6,6 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QPushButton>
-#include <QRandomGenerator>
 #include <QTimer>
 #include <QMessageBox>
 #include <QDebug>
@@ -71,6 +70,8 @@ private slots:
 
     void on_robotCheckBox_toggled(bool);
 
+    void on_collisionLevelComboBox_currentIndexChanged(int);
+
 public:
     RobotManager *rm;
 
@@ -82,12 +83,10 @@ private:
     std::vector<QDoubleSpinBox *> jointMoveSpinList;
     std::vector<QLabel *> posInfoLabelList;
     IPEdit *ipEdit;
-    ros::NodeHandle &nh;
     VirtualRobot virtualRobot;
     RealRobot realRobot;
     RobotManager virtualRM;
     RobotManager realRM;
-
 
     QLabel *motionControlLabel;
 

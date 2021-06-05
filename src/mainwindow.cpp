@@ -28,6 +28,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(1) {
     connect(&timer, &QTimer::timeout, this, &MainWindow::onTimeout);
     timer.start(500);
 
+    // todo: 对单个机械臂提供单独服务
     m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
             "jaka_trajectory_srv",
             [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
@@ -59,7 +60,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(1) {
                             subWindowList[1]->rm->motion_abort();
                             std::lock_guard<std::mutex> lock(respMutex);
                             resp.success = false;
-                            resp.left_desc.data = StdErrorFactory::getDesc(res);
+                            resp.left_desc.data = DescFactory::getErrorDesc(res);
                         }
                     });
                 } else {
@@ -72,7 +73,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(1) {
                             subWindowList[0]->rm->motion_abort();
                             std::lock_guard<std::mutex> lock(respMutex);
                             resp.success = false;
-                            resp.right_desc.data = StdErrorFactory::getDesc(res);
+                            resp.right_desc.data = DescFactory::getErrorDesc(res);
                         }
                     });
                 } else {

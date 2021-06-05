@@ -15,6 +15,11 @@
 #include <iostream>
 #include <random>
 
+#include <ros/ros.h>
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include "tools.hpp"
 
 
@@ -30,9 +35,11 @@ private:
     std::chrono::high_resolution_clock::time_point m_endTime;
     double m_targetJointVal[6] = {};
     double m_startJointVal[6] = {};
-    std::chrono::milliseconds m_duration;
+    std::chrono::milliseconds m_duration{};
     std::atomic_bool m_isMoving;
     std::atomic_bool m_isCurAbort;
+    std::atomic_int m_collisionLevel;
+    std::string m_prefix;
 
 
     // !! 线程不安全, 使用前需要上锁
@@ -58,17 +65,46 @@ private:
         return ERR_SUCC;
     }
 
+    tf2_ros::Buffer m_tfBuffer;
+    tf2_ros::TransformListener m_tfListener;
+
+    void m_updatePose_unsafe() {
+        try {
+            geometry_msgs::TransformStamped trans = m_tfBuffer.lookupTransform(m_prefix + "base_link",
+                                                                               m_prefix + "link_6",
+                                                                               ros::Time(0));
+            tf2::Quaternion qua;
+            tf2::convert(trans.transform.rotation, qua);
+            tf2::Matrix3x3(qua).getRPY(m_status.cartesiantran_position[3],
+                                       m_status.cartesiantran_position[4],
+                                       m_status.cartesiantran_position[5]);
+            m_status.cartesiantran_position[0] = trans.transform.translation.x * 1000.0;
+            m_status.cartesiantran_position[1] = trans.transform.translation.y * 1000.0;
+            m_status.cartesiantran_position[2] = trans.transform.translation.z * 1000.0;
+        }
+        catch (tf2::TransformException &ex) {
+            ROS_WARN_ONCE("%s", ex.what());
+            m_status.cartesiantran_position[0] = NAN;
+        }
+    }
+
 public:
     static void sleepMilliseconds(long long milliseconds = 100) {
         std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 
-    VirtualRobot() : m_isLogin(false), m_isMoving(false), m_isCurAbort(false) {}
+    VirtualRobot() : m_isLogin(false), m_isMoving(false), m_isCurAbort(false),
+                     m_collisionLevel(1), m_duration(), m_tfListener(m_tfBuffer) {
+    }
 
 //    ~VirtualRobot() {}
 
     bool is_login() {
         return m_isLogin.load();
+    }
+
+    void set_prefix(const std::string &prefix) {
+        m_prefix = prefix;
     }
 
     virtual errno_t login_in(const char *ip) {
@@ -194,8 +230,20 @@ public:
     virtual errno_t get_robot_status(RobotStatus *status) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_updateJointVal_unsafe();
+        m_updatePose_unsafe();
         memcpy(status, &m_status, sizeof(RobotStatus));
         return ERR_SUCC;
+    }
+
+    virtual errno_t get_collision_level(int *level) {
+        *level = m_collisionLevel.load();
+        return ERR_SUCC;
+    }
+
+    virtual errno_t set_collision_level(const int level) {
+        m_collisionLevel.exchange(level);
+        return ERR_SUCC;
+
     }
 };
 
@@ -207,6 +255,31 @@ public:
     RealRobot() {
         char version[1024];
         m_robot.get_sdk_version(version);
+//        double pose[6];
+//        pose[3] = -1.2;
+//        pose[4] = 0.43;
+//        pose[5] = 0.771;
+//        Eigen::Vector3d eulerAngle(pose[3], pose[4], pose[5]);
+//        Eigen::AngleAxisd rollAngle(Eigen::AngleAxisd(eulerAngle(0), Eigen::Vector3d::UnitX()));
+//        Eigen::AngleAxisd pitchAngle(Eigen::AngleAxisd(eulerAngle(1), Eigen::Vector3d::UnitY()));
+//        Eigen::AngleAxisd yawAngle(Eigen::AngleAxisd(eulerAngle(2), Eigen::Vector3d::UnitZ()));
+//        Eigen::Quaterniond quaternion;
+//        quaternion = yawAngle * pitchAngle * rollAngle;
+//
+//        Rpy rpy;
+//        RotMatrix rot_matrix;
+//        Quaternion qua;
+//        rpy.rx = pose[3];
+//        rpy.ry = pose[4];
+//        rpy.rz = pose[5];
+//        m_robot.rpy_to_rot_matrix(&rpy, &rot_matrix);
+//        m_robot.rot_matrix_to_quaternion(&rot_matrix, &qua);
+//        qDebug() << qua.x << ", " << qua.y << ", " << qua.z << ", " << qua.s;
+//        qDebug() << quaternion.x() << ", " << quaternion.y() << ", " << quaternion.z() << ", " << quaternion.w();
+//
+//        Eigen::Vector3d angle = quaternion.matrix().eulerAngles(2, 1, 0);
+//        qDebug() << angle(2) << ", " << angle(1) << "" << angle(0);
+
         std::cout << "jaka sdk version: " << version << std::endl;
     }
 
@@ -271,6 +344,14 @@ public:
 
     errno_t get_robot_status(RobotStatus *status) override {
         return m_robot.get_robot_status(status);
+    }
+
+    errno_t get_collision_level(int *level) override {
+        return m_robot.get_collision_level(level);
+    }
+
+    errno_t set_collision_level(const int level) override {
+        return m_robot.set_collision_level(level);
     }
 };
 

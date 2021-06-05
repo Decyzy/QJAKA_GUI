@@ -18,38 +18,54 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <moveit_msgs/RobotTrajectory.h>
 
 #include "robot.hpp"
 
-
-class ROSClient {
+class ROSPublisher {
 private:
     ros::NodeHandle &m_nh;
-    sensor_msgs::JointState m_msg;
+    sensor_msgs::JointState m_jointStateMsg;
+    geometry_msgs::PoseStamped m_poseMsg;
     ros::Publisher m_jointStatePub;
+    ros::Publisher m_posePub;
+    JAKAZuRobot m_robot;
 
 public:
     const std::string m_prefix;
 
-    explicit ROSClient(ros::NodeHandle &nh, std::string prefix) : m_nh(nh), m_prefix(std::move(prefix)) {
-        m_jointStatePub = m_nh.advertise<sensor_msgs::JointState>("jaka_joint_states", 10);
-
-        m_msg = sensor_msgs::JointState();
-        m_msg.name.resize(6);
-        m_msg.position.resize(6);
+    explicit ROSPublisher(ros::NodeHandle &nh, std::string prefix) : m_nh(nh), m_prefix(std::move(prefix)) {
+        m_jointStatePub = m_nh.advertise<sensor_msgs::JointState>("jaka_joint_states", 5);
+        m_posePub = m_nh.advertise<geometry_msgs::PoseStamped>(m_prefix + "jaka_pose", 5);
+        m_jointStateMsg = sensor_msgs::JointState();
+        m_jointStateMsg.name.resize(6);
+        m_jointStateMsg.position.resize(6);
 
         for (int i = 0; i < 6; ++i) {
-            m_msg.name[i] = m_prefix + "joint_" + std::to_string(i + 1);
-            m_msg.position[i] = 0.0;
+            m_jointStateMsg.name[i] = m_prefix + "joint_" + std::to_string(i + 1);
+            m_jointStateMsg.position[i] = 0.0;
         }
+        m_poseMsg.header.frame_id = m_prefix + "base_link";
     }
 
     void publish_joint_states(const double states[6]) {
+        m_jointStateMsg.header.stamp = ros::Time::now();
         for (int i = 0; i < 6; ++i) {
-            m_msg.position[i] = states[i];
+            m_jointStateMsg.position[i] = states[i];
         }
-        m_jointStatePub.publish(m_msg);
+        m_jointStatePub.publish(m_jointStateMsg);
+    }
+
+    void publish_ee_pose(const double pose[6], tf2::Quaternion &qua) {
+        m_poseMsg.header.stamp = ros::Time::now();
+        qua.setRPY(pose[3], pose[4], pose[5]);
+        tf2::convert(qua, m_poseMsg.pose.orientation);
+
+        m_poseMsg.pose.position.x = pose[0] / 1000.0;
+        m_poseMsg.pose.position.y = pose[1] / 1000.0;
+        m_poseMsg.pose.position.z = pose[2] / 1000.0;
+        m_posePub.publish(m_poseMsg);
     }
 };
 
@@ -136,33 +152,44 @@ private:
 
     VirtualRobot *m_pRobot = nullptr;
     RobotStatus m_status{};
+    tf2::Quaternion m_qua;
 
     std::mutex m_getStatusMutex;
 
     std::mutex m_execMutex;
-    ROSClient m_rosClient;
+    ROSPublisher m_rosPublisher;
+
+    std::atomic_int m_collisionLevel;
+
 public:
     void m_startGetThread() {
         m_terminateGetThread();
 
         m_isWillGetThreadQuit.exchange(false);
         m_getThread = std::thread([&]() {
-            RobotStatus status;
-            ros::Rate rate(10);
+            RobotStatus status{};
+            ros::Rate rate(15);
+            int collisionLevel = -1;
             while (!m_isWillGetThreadQuit.load()) {
-                auto res = m_pRobot->get_robot_status(&status);
+                errno_t res = m_pRobot->get_collision_level(&collisionLevel);
+                if (res == ERR_SUCC) m_collisionLevel.exchange(collisionLevel);
+                else std::cout << "get_collision_level error" << std::endl;
+
+                res = m_pRobot->get_robot_status(&status);
                 if (res == ERR_SUCC) {
                     {
                         std::lock_guard<std::mutex> lock(m_getStatusMutex);
                         memcpy(&m_status, &status, sizeof(RobotStatus));
                     }
                     emit updateStatusSignal(true);
-                    m_rosClient.publish_joint_states(status.joint_position);
+                    m_rosPublisher.publish_joint_states(status.joint_position);
+                    m_rosPublisher.publish_ee_pose(status.cartesiantran_position, m_qua);
                 } else {
                     std::cout << "get_robot_status error" << std::endl;
                 }
+                //
                 rate.sleep();
-//                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                // std::this_thread::sleep_for(std::chrono::milliseconds(80));
             }
         });
     }
@@ -176,8 +203,10 @@ public:
     RobotManager(VirtualRobot *robot,
                  ros::NodeHandle &nh,
                  const std::string &prefix) : m_isWillGetThreadQuit(false),
-                                              m_rosClient(nh, prefix) {
+                                              m_rosPublisher(nh, prefix),
+                                              m_collisionLevel(-1) {
         m_pRobot = robot;
+        m_pRobot->set_prefix(prefix);
         m_preThread.startThread();
         m_execThread.startThread();
         m_emergencyThread.startThread();
@@ -189,9 +218,13 @@ public:
     }
 
 
-    void get_robot_status(RobotStatus *status) {
+    void get_robot_status(RobotStatus *status,     tf2::Quaternion &qua) {
         std::lock_guard<std::mutex> lock(m_getStatusMutex);
         memcpy(status, &m_status, sizeof(RobotStatus));
+        qua.setX(m_qua.x());
+        qua.setY(m_qua.y());
+        qua.setZ(m_qua.z());
+        qua.setW(m_qua.w());
     }
 
 
@@ -304,11 +337,11 @@ public:
             errno_t res = ERR_SUCC;
             for (const auto &p:trajectory.joint_trajectory.points) {
                 JointValue jVal;
-                int offset = (p.positions.size() > 6 && m_rosClient.m_prefix == "right_") ? 6 : 0;
+                int offset = (p.positions.size() > 6 && m_rosPublisher.m_prefix == "right_") ? 6 : 0;
                 for (int i = 0; i < 6; ++i) {
                     jVal.jVal[i] = p.positions[i + offset];
                 }
-                std::cout << m_rosClient.m_prefix << "robot is moving to " << count++ << std::endl;
+                std::cout << m_rosPublisher.m_prefix << "robot is moving to " << count++ << std::endl;
                 res = m_pRobot->joint_move(&jVal, ABS);
                 if (res != ERR_SUCC) {
                     break;
@@ -350,6 +383,24 @@ public:
             auto res = m_pRobot->collision_recover();
             emit errorSignal(res);
         })) {
+            emit busySignal();
+        }
+    }
+
+    int get_collision_level() {
+        return m_collisionLevel.load();
+    }
+
+    void set_collision_level(const int level) {
+        if (m_execMutex.try_lock()) {
+            if (!m_execThread.addAsyncTask([&, level]() {
+                auto res = m_pRobot->set_collision_level(level);
+                emit errorSignal(res);
+            })) {
+                emit busySignal();
+            }
+            m_execMutex.unlock();
+        } else {
             emit busySignal();
         }
     }

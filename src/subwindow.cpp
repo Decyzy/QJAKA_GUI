@@ -11,7 +11,6 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                      QWidget *parent,
                      const std::string &prefix) : QWidget(parent),
                                                   ui(new Ui::SubWindow),
-                                                  nh(nh),
                                                   virtualRM(&virtualRobot, nh, prefix),
                                                   realRM(&realRobot, nh, prefix) {
 
@@ -171,7 +170,7 @@ void SubWindow::onLogout(int errorCode) {
 void SubWindow::showErrorBox(int errorCode) {
     if (errorCode != ERR_SUCC)
         QMessageBox::critical(this, "Error",
-                              QString::fromStdString(StdErrorFactory::getDesc(errorCode)),
+                              QString::fromStdString(DescFactory::getErrorDesc(errorCode)),
                               QMessageBox::Ok);
 }
 
@@ -267,9 +266,14 @@ void SubWindow::clearAllStatus() {
     setLabelStatus(ui->collisionProtectedLabel, STATUS_UNKNOWN);
 }
 
+/**
+ * 更新UI上机器人各状态值
+ * @param isAll 是否全量更新
+ */
 void SubWindow::onUpdateStatus(bool isAll) {
     RobotStatus status;
-    rm->get_robot_status(&status);
+    tf2::Quaternion qua;
+    rm->get_robot_status(&status, qua);
     if (isAll) {
         for (int i = 0; i < 6; ++i) {
             jointInfoLabelList[i][4]->setText(QString::number(status.joint_position[i] / M_PI * 180.0, 'f', 1));
@@ -279,7 +283,8 @@ void SubWindow::onUpdateStatus(bool isAll) {
                     QString::number(status.robot_monitor_data.jointMonitorData[i].instCurrent, 'f', 1));
             jointInfoLabelList[i][3]->setText(
                     QString::number(status.robot_monitor_data.jointMonitorData[i].instTemperature, 'f', 1));
-            jointInfoLabelList[i][0]->setText(QString::number(status.torq_sensor_monitor_data.actTorque[i] * 1000.0, 'f', 1));
+            jointInfoLabelList[i][0]->setText(
+                    QString::number(status.torq_sensor_monitor_data.actTorque[i] * 1000.0, 'f', 1));
             double temp = status.cartesiantran_position[i];
             if (i >= 3) temp = temp / M_PI * 180.0;
             posInfoLabelList[i]->setText(QString::number(temp, 'f', 1));
@@ -290,6 +295,10 @@ void SubWindow::onUpdateStatus(bool isAll) {
         ui->avgPLabel->setText(QString::number(status.robot_monitor_data.robotAveragePower, 'f', 1));
         ui->avgALabel->setText(QString::number(status.robot_monitor_data.robotAverageCurrent, 'f', 1));
         ui->rapidLabel->setText(QString::number(status.rapidrate, 'f', 2));
+        ui->curToolLabel->setText(QString::number(status.current_tool_id));
+        auto level = rm->get_collision_level();
+        level = (level > 0 && level < 6) ? level : 6;
+        ui->collisionLevelComboBox->setCurrentIndex(level);
 
         setLabelStatus(ui->powerOnLabel, status.powered_on == 0 ? STATUS_RED : STATUS_GREEN);
         setLabelStatus(ui->enableLabel, status.enabled == 0 ? STATUS_RED : STATUS_GREEN);
@@ -301,12 +310,19 @@ void SubWindow::onUpdateStatus(bool isAll) {
         setLabelStatus(ui->limitLabel, status.on_soft_limit == 0 ? STATUS_GREEN : STATUS_RED);
         setLabelStatus(ui->dragLabel, status.drag_status == 0 ? STATUS_GRAY : STATUS_ORANGE);
         setLabelStatus(ui->sdkLabel, status.is_socket_connect == 0 ? STATUS_RED : STATUS_GREEN);
+
     } else {
         for (int i = 0; i < 6; ++i) {
             jointInfoLabelList[i][4]->setText(QString::number(status.joint_position[i] / M_PI * 180.0, 'f', 1));
         }
     }
 
+    ui->quaXLabel->setText(QString::number(qua.x(), 'f', 4));
+    ui->quaYLabel->setText(QString::number(qua.y(), 'f', 4));
+    ui->quaZLabel->setText(QString::number(qua.z(), 'f', 4));
+    ui->quaWLabel->setText(QString::number(qua.w(), 'f', 4));
+
+    // 字符画
     char text[] = "====";
     if (jointUpdateCount >= strlen(text)) {
         jointUpdateCount = 0;
@@ -315,6 +331,7 @@ void SubWindow::onUpdateStatus(bool isAll) {
     }
     ui->jointUpdateLabel->setText(text);
 
+    // 用于 set_current
     memcpy(curJVal, status.joint_position, sizeof(curJVal));
 }
 
@@ -336,6 +353,8 @@ void SubWindow::onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled) {
                 p->setEnabled(true);
             }
         }
+        ui->collisionLevelComboBox->setEnabled(true);
+        ui->collisionRecoverBt->setEnabled(true);
     } else {
         ui->abortBt->setEnabled(false);
         ui->collisionRecoverBt->setEnabled(false);
@@ -346,6 +365,8 @@ void SubWindow::onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled) {
                 p->setEnabled(false);
             }
         }
+        ui->collisionLevelComboBox->setEnabled(false);
+        ui->collisionRecoverBt->setEnabled(false);
     }
 }
 
@@ -440,6 +461,11 @@ void SubWindow::updateRMConnection(RobotManager *old, RobotManager *cur) {
     connect(cur, &RobotManager::updateBtSignal, this, &SubWindow::onUpdateBt);
     connect(cur, &RobotManager::busySignal, this, &SubWindow::onBusy);
     connect(cur, &RobotManager::addInfoSignal, this, &SubWindow::onAddInfo);
+}
+
+void SubWindow::on_collisionLevelComboBox_currentIndexChanged(int index) {
+    if (index > 0 && index < 6) rm->set_collision_level(index);
+    else showErrorBox(ERR_INVALID_PARAMETER);
 }
 
 
