@@ -20,6 +20,7 @@
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <moveit_msgs/RobotTrajectory.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 #include "robot.hpp"
 
@@ -27,9 +28,12 @@ class ROSPublisher {
 private:
     ros::NodeHandle &m_nh;
     sensor_msgs::JointState m_jointStateMsg;
-    geometry_msgs::PoseStamped m_poseMsg;
+    geometry_msgs::TransformStamped m_tfMsg;
+
     ros::Publisher m_jointStatePub;
     ros::Publisher m_posePub;
+    tf2_ros::TransformBroadcaster m_tfPub;
+
     JAKAZuRobot m_robot;
 
 public:
@@ -37,7 +41,6 @@ public:
 
     explicit ROSPublisher(ros::NodeHandle &nh, std::string prefix) : m_nh(nh), m_prefix(std::move(prefix)) {
         m_jointStatePub = m_nh.advertise<sensor_msgs::JointState>("jaka_joint_states", 5);
-        m_posePub = m_nh.advertise<geometry_msgs::PoseStamped>(m_prefix + "jaka_pose", 5);
         m_jointStateMsg = sensor_msgs::JointState();
         m_jointStateMsg.name.resize(6);
         m_jointStateMsg.position.resize(6);
@@ -46,7 +49,9 @@ public:
             m_jointStateMsg.name[i] = m_prefix + "joint_" + std::to_string(i + 1);
             m_jointStateMsg.position[i] = 0.0;
         }
-        m_poseMsg.header.frame_id = m_prefix + "base_link";
+
+        m_tfMsg.header.frame_id = m_prefix + "base_link";
+        m_tfMsg.child_frame_id = m_prefix + "ee";
     }
 
     void publish_joint_states(const double states[6]) {
@@ -57,15 +62,14 @@ public:
         m_jointStatePub.publish(m_jointStateMsg);
     }
 
-    void publish_ee_pose(const double pose[6], tf2::Quaternion &qua) {
-        m_poseMsg.header.stamp = ros::Time::now();
+    void publish_ee_tf(const double *pose, tf2::Quaternion &qua) {
+        m_tfMsg.header.stamp = ros::Time::now();
+        m_tfMsg.transform.translation.x = pose[0] / 1000.0;
+        m_tfMsg.transform.translation.y = pose[1] / 1000.0;
+        m_tfMsg.transform.translation.z = pose[2] / 1000.0;
         qua.setRPY(pose[3], pose[4], pose[5]);
-        tf2::convert(qua, m_poseMsg.pose.orientation);
-
-        m_poseMsg.pose.position.x = pose[0] / 1000.0;
-        m_poseMsg.pose.position.y = pose[1] / 1000.0;
-        m_poseMsg.pose.position.z = pose[2] / 1000.0;
-        m_posePub.publish(m_poseMsg);
+        tf2::convert(qua, m_tfMsg.transform.rotation);
+        m_tfPub.sendTransform(m_tfMsg);
     }
 };
 
@@ -183,7 +187,7 @@ public:
                     }
                     emit updateStatusSignal(true);
                     m_rosPublisher.publish_joint_states(status.joint_position);
-                    m_rosPublisher.publish_ee_pose(status.cartesiantran_position, m_qua);
+                    m_rosPublisher.publish_ee_tf(status.cartesiantran_position, m_qua);
                 } else {
                     std::cout << "get_robot_status error" << std::endl;
                 }
@@ -218,7 +222,7 @@ public:
     }
 
 
-    void get_robot_status(RobotStatus *status,     tf2::Quaternion &qua) {
+    void get_robot_status(RobotStatus *status, tf2::Quaternion &qua) {
         std::lock_guard<std::mutex> lock(m_getStatusMutex);
         memcpy(status, &m_status, sizeof(RobotStatus));
         qua.setX(m_qua.x());

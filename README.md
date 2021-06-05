@@ -71,7 +71,29 @@ roslaunch qjaka_gui test_trajectory.launch
 
 ### 关于`ROS`
 
-- 在login成功后，随着`getThread`的执行，机械臂关节信息也一并以固定频率发布，topic名为`jaka_joint_states`；
+#### Topic
 
-- 名为`jaka_trajectory_srv`的service接受带`moveit_msgs::RobotTrajectory`的请求，内部依次调用机器人的`joint_move`接口。
+- `jaka_joint_states`
+  - Type：`sensor_msgs::JointState`
+  - Desc：在login成功后，随着`getThread`的执行，机械臂关节信息也一并以固定频率发布
+- TF：`left_ee`，`right_ee`
+  - `left_joint_6`，`right_joint_6`在真机上的位姿。虚拟机器人上二者重合，真机上不重合（因机器人模型与真机的DH参数不同）
+
+#### Service
+
+- `jaka_trajectory_srv`（**！！修改中**）
+
+  - Type：见`srv/JointMoveService.srv`，
+
+    ```
+    Header header
+    std_msgs/String prefix  
+    moveit_msgs/RobotTrajectory trajectory
+    ---
+    bool success
+    std_msgs/String left_desc
+    std_msgs/String right_desc
+    ```
+
+  - Desc：接受带`moveit_msgs::RobotTrajectory`的请求，内部依次调用机器人的`joint_move`接口。
 
