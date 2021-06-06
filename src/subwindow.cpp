@@ -12,7 +12,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                      const std::string &prefix) : QWidget(parent),
                                                   ui(new Ui::SubWindow),
                                                   virtualRM(&virtualRobot, nh, prefix),
-                                                  realRM(&realRobot, nh, prefix) {
+                                                  realRM(&realRobot, nh, prefix), m_prefix(prefix) {
 
     ui->setupUi(this);
     rm = &virtualRM;
@@ -113,6 +113,40 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
     ui->robotCheckBox->setChecked(true);
 
     updateRMConnection(nullptr, rm);
+
+    m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
+            m_prefix + "trajectory_srv",
+            [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
+                // init
+                resp.success = true;
+                // print info
+                std::cout << "recv " << m_prefix << "trajectory" << std::endl;
+                bprinter::TablePrinter tp(&std::cout);
+                tp.AddColumn("", 4);
+                for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
+                    tp.AddColumn(joint_name, 13);
+                }
+                tp.PrintHeader();
+                for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
+                    auto &p = req.trajectory.joint_trajectory.points[i];
+                    tp << i;
+                    for (double position : p.positions)
+                        tp << int(position / M_PI * 180.0 * 10) / 10.0;
+                }
+                tp.PrintFooter();
+                // exec
+                rm->set_ee_close(req.ee_close_at_start);
+                auto res = rm->trajectory_move(req.trajectory);
+                if (res != ERR_SUCC) {
+                    resp.success = false;
+                    resp.desc.data = DescFactory::getErrorDesc(res);
+                } else {
+//                    rm->set_ee_close(req.ee_close_at_end);
+                }
+                // finish
+                std::cout << "exec trajectory finished" << std::endl;
+                return true;
+            });
 }
 
 SubWindow::~SubWindow() {

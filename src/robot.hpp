@@ -243,7 +243,10 @@ public:
     virtual errno_t set_collision_level(const int level) {
         m_collisionLevel.exchange(level);
         return ERR_SUCC;
+    }
 
+    virtual errno_t set_do(int index, bool on) {
+        return ERR_SUCC;
     }
 };
 
@@ -352,6 +355,10 @@ public:
 
     errno_t set_collision_level(const int level) override {
         return m_robot.set_collision_level(level);
+    }
+
+    errno_t set_do(int index, bool on) override {
+        return m_robot.set_digital_output(IO_CABINET, index, on ? TRUE : FALSE);
     }
 };
 

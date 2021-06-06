@@ -21,6 +21,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <moveit_msgs/RobotTrajectory.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include "qjaka_gui/JointMoveService.h"
 
 #include "robot.hpp"
 
@@ -41,10 +42,11 @@ public:
 
     explicit ROSPublisher(ros::NodeHandle &nh, std::string prefix) : m_nh(nh), m_prefix(std::move(prefix)) {
         m_jointStatePub = m_nh.advertise<sensor_msgs::JointState>("jaka_joint_states", 5);
+
+
         m_jointStateMsg = sensor_msgs::JointState();
         m_jointStateMsg.name.resize(6);
         m_jointStateMsg.position.resize(6);
-
         for (int i = 0; i < 6; ++i) {
             m_jointStateMsg.name[i] = m_prefix + "joint_" + std::to_string(i + 1);
             m_jointStateMsg.position[i] = 0.0;
@@ -165,6 +167,8 @@ private:
 
     std::atomic_int m_collisionLevel;
 
+    std::string m_prefix;
+
 public:
     void m_startGetThread() {
         m_terminateGetThread();
@@ -208,7 +212,7 @@ public:
                  ros::NodeHandle &nh,
                  const std::string &prefix) : m_isWillGetThreadQuit(false),
                                               m_rosPublisher(nh, prefix),
-                                              m_collisionLevel(-1) {
+                                              m_collisionLevel(-1), m_prefix(prefix) {
         m_pRobot = robot;
         m_pRobot->set_prefix(prefix);
         m_preThread.startThread();
@@ -405,6 +409,14 @@ public:
             }
             m_execMutex.unlock();
         } else {
+            emit busySignal();
+        }
+    }
+
+    void set_ee_close(bool close) {
+        if (!m_emergencyThread.addAsyncTask([&, close]() {
+            auto res = m_pRobot->set_do(m_prefix == "left_" ? 2 : 3, !close);
+        })) {
             emit busySignal();
         }
     }

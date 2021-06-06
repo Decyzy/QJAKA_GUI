@@ -4,7 +4,7 @@
 
 #include "mainwindow.h"
 
-MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(1) {
+MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
     w = new QWidget(this);
     layout = new QGridLayout(w);
     mainStatusBar = new QStatusBar(this);
@@ -29,9 +29,9 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(1) {
     timer.start(500);
 
     // todo: 对单个机械臂提供单独服务
-    m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
-            "jaka_trajectory_srv",
-            [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
+    m_trajectorySrv = nh.advertiseService<qjaka_gui::DualRobotJointMoveService::Request, qjaka_gui::DualRobotJointMoveService::Response>(
+            "dual_trajectory_srv",
+            [&](qjaka_gui::DualRobotJointMoveService::Request &req, qjaka_gui::DualRobotJointMoveService::Response &resp) -> bool {
                 // init
                 resp.success = true;
                 // print info

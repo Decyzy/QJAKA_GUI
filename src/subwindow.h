@@ -88,6 +88,10 @@ private:
     RobotManager virtualRM;
     RobotManager realRM;
 
+    std::string m_prefix;
+
+    ros::ServiceServer m_trajectorySrv;
+
     QLabel *motionControlLabel;
 
     double curJVal[6]{};

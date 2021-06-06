@@ -100,6 +100,8 @@ set(PROJECT_SOURCES
 add_service_files(
     FILES
     JointMoveService.srv
+    DualRobotJointMoveService.srv
+
 )
 
 ## Generate actions in the 'action' folder
