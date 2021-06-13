@@ -18,66 +18,44 @@
 #define ERR_CUSTOM_RECV_ABORT 500
 #define ERR_CUSTOM_NOT_LOGIN 501
 
-enum emDescType {
-    DESC_ERR, DESC_COLLISION_LEVEL
-};
 
-class DescFactory {
+class ErrorDescFactory {
 public:
-    std::unordered_map<int, std::string> descMap{};
+    std::unordered_map<int, std::string> errorDescMap{};
 
-    explicit DescFactory(emDescType t) {
-        switch (t) {
-            case DESC_ERR: {
-                descMap[ERR_SUCC] = "调用成功";
-                descMap[ERR_FUCTION_CALL_ERROR] = "异常调用，调用接口异常，控制器不支持";
-                descMap[ERR_INVALID_HANDLER] = "无效的控制句柄";
-                descMap[ERR_INVALID_PARAMETER] = "无效的参数";
-                descMap[ERR_COMMUNICATION_ERR] = "通信连接错误";
-                descMap[ERR_KINE_INVERSE_ERR] = "逆解失败";
-                descMap[ERR_EMERGENCY_PRESSED] = "急停开关被按下";
-                descMap[ERR_NOT_POWERED] = "机器人未上电";
-                descMap[ERR_NOT_ENABLED] = "机器人未使能";
-                descMap[ERR_DISABLE_SERVOMODE] = "机器人没有进入servo模式";
-                descMap[ERR_NOT_OFF_ENABLE] = "机器人没有关闭使能";
-                descMap[ERR_PROGRAM_IS_RUNNING] = "程序正在运行，不允许操作";
-                descMap[ERR_CANNOT_OPEN_FILE] = "无法打开文件，文件不存在";
-                descMap[ERR_MOTION_ABNORMAL] = "运动过程中发生异常";
+    explicit ErrorDescFactory() {
+        errorDescMap[ERR_SUCC] = "调用成功";
+        errorDescMap[ERR_FUCTION_CALL_ERROR] = "异常调用，调用接口异常，控制器不支持";
+        errorDescMap[ERR_INVALID_HANDLER] = "无效的控制句柄";
+        errorDescMap[ERR_INVALID_PARAMETER] = "无效的参数";
+        errorDescMap[ERR_COMMUNICATION_ERR] = "通信连接错误";
+        errorDescMap[ERR_KINE_INVERSE_ERR] = "逆解失败";
+        errorDescMap[ERR_EMERGENCY_PRESSED] = "急停开关被按下";
+        errorDescMap[ERR_NOT_POWERED] = "机器人未上电";
+        errorDescMap[ERR_NOT_ENABLED] = "机器人未使能";
+        errorDescMap[ERR_DISABLE_SERVOMODE] = "机器人没有进入servo模式";
+        errorDescMap[ERR_NOT_OFF_ENABLE] = "机器人没有关闭使能";
+        errorDescMap[ERR_PROGRAM_IS_RUNNING] = "程序正在运行，不允许操作";
+        errorDescMap[ERR_CANNOT_OPEN_FILE] = "无法打开文件，文件不存在";
+        errorDescMap[ERR_MOTION_ABNORMAL] = "运动过程中发生异常";
+        /* custom error code */
+        errorDescMap[ERR_CUSTOM_IS_MOVING] = "正在运动中";
+        errorDescMap[ERR_CUSTOM_RECV_ABORT] = "被手动停止运动";
+        errorDescMap[ERR_CUSTOM_NOT_LOGIN] = "没有登录";
+    }
 
-                descMap[ERR_CUSTOM_IS_MOVING] = "正在运动中";
-                descMap[ERR_CUSTOM_RECV_ABORT] = "被手动停止运动";
-                descMap[ERR_CUSTOM_NOT_LOGIN] = "没有登录";
-            }
-                break;
-            // 0为关闭碰撞，1为碰撞阈值25N，2为碰撞阈值50N，3为碰撞阈值75N，4为碰撞阈值100N，5为碰撞阈值125N
-            case DESC_COLLISION_LEVEL: {
-                descMap[0] = "碰撞关闭";
-                descMap[1] = "25N";
-                descMap[2] = "50N";
-                descMap[3] = "75N";
-                descMap[4] = "100N";
-                descMap[5] = "125N";
-            }
-                break;
-            default:
-                break;
-        }
+    static ErrorDescFactory* build() {
+        static ErrorDescFactory instance;
+        return &instance;
     }
 
     // 单例
-    static std::string getErrorDesc(errno_t errorCode) {
-        static DescFactory instance(DESC_ERR);
-        if (!instance.descMap.count(errorCode)) return "未知错误!手册中没写, 错误码:" + std::to_string(errorCode);
-        else return instance.descMap[errorCode];
+    std::string getErrorDesc(errno_t errorCode) {
+        if (!errorDescMap.count(errorCode)) return "未知错误!手册中没写, 错误码:" + std::to_string(errorCode);
+        else return errorDescMap[errorCode];
     }
-
-    // 单例
-//    static std::string getCollisionLevelDesc(int level) {
-//        static DescFactory instance(DESC_COLLISION_LEVEL);
-//        if (!instance.descMap.count(level)) return std::to_string(level);
-//        else return instance.descMap[level];
-//    }
 };
+
 
 //
 //class PoseTransform {

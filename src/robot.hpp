@@ -71,7 +71,7 @@ private:
     void m_updatePose_unsafe() {
         try {
             geometry_msgs::TransformStamped trans = m_tfBuffer.lookupTransform(m_prefix + "base_link",
-                                                                               m_prefix + "link_6",
+                                                                               m_prefix + "ee_link",
                                                                                ros::Time(0));
             tf2::Quaternion qua;
             tf2::convert(trans.transform.rotation, qua);
@@ -84,7 +84,7 @@ private:
         }
         catch (tf2::TransformException &ex) {
             ROS_WARN_ONCE("%s", ex.what());
-            m_status.cartesiantran_position[0] = NAN;
+            m_status.cartesiantran_position[0] = 0.0;
         }
     }
 
@@ -169,7 +169,6 @@ public:
             else if (!m_status.powered_on) return ERR_NOT_POWERED;
             else if (!m_status.enabled) return ERR_NOT_ENABLED;
 
-
             m_isMoving.exchange(true);
 
             double maxDeltaRad = 0;
@@ -191,10 +190,18 @@ public:
             m_endTime = std::chrono::high_resolution_clock::now() + m_duration;
         }
         while (m_isMoving.load()) {
-            sleepMilliseconds(10);
+            sleepMilliseconds(1);
         }
         if (m_isCurAbort.load()) return ERR_CUSTOM_RECV_ABORT;
         else return ERR_SUCC;
+    }
+
+    virtual errno_t servo_move_enable(bool enable) {
+        return ERR_SUCC;
+    }
+
+    virtual errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) {
+        return joint_move(joint_pos, move_mode);
     }
 
     virtual errno_t motion_abort() {
@@ -291,6 +298,13 @@ public:
         auto res = m_robot.login_in(ip);
         std::cout << "login complete" << std::endl;
         if (res == ERR_SUCC) {
+            auto r = m_robot.set_error_handler([](int errorCode){
+                std::cout << "ERROR!! error code = " << errorCode << std::endl;
+            });
+            std::cout << "set_error_handler: " << r << std::endl;
+            char filepath[] = "/home/msi/Documents/JAKA_SDK_LOG";
+            r = m_robot.set_SDK_filepath(filepath);
+            std::cout << "set_SDK_filepath: " << res << std::endl;
             m_isLogin.exchange(true);
 //            m_robot.set_network_exception_handle(200, MOT_ABORT);
         }
@@ -327,6 +341,14 @@ public:
 
     errno_t joint_move(const JointValue *joint_pos, MoveMode move_mode) override {
         return m_robot.joint_move(joint_pos, move_mode, true, m_radPerSecond);
+    }
+
+    errno_t servo_move_enable(bool enable) override {
+        return m_robot.servo_move_enable(enable ? TRUE : FALSE);
+    }
+
+    errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) override {
+        return m_robot.servo_j(joint_pos, move_mode, step_num);
     }
 
     errno_t motion_abort() override {

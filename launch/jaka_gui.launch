@@ -8,9 +8,9 @@
     <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
         <rosparam param="source_list">[/jaka_joint_states]</rosparam>
     </node>
-    <node pkg="qjaka_gui" type="qjaka_gui" name="qjaka_gui" output="screen">
+    <node pkg="qjaka_gui" type="qjaka_gui" name="qjaka_gui" output="screen" respawn="true" respawn_delay="1">
 <!--        <remap from="jaka_joint_states" to="joint_states"/>-->
-        <param name="left_ip" value="192.168.1.103"/>
-        <param name="right_ip" value="192.168.1.102"/>
+        <param name="left_ip" value="192.168.0.103"/>
+        <param name="right_ip" value="192.168.0.100"/>
     </node>
 </launch>

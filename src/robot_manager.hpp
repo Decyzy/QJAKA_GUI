@@ -15,6 +15,7 @@
 #include <iostream>
 #include <random>
 #include <utility>
+#include <condition_variable>
 
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
@@ -43,7 +44,6 @@ public:
     explicit ROSPublisher(ros::NodeHandle &nh, std::string prefix) : m_nh(nh), m_prefix(std::move(prefix)) {
         m_jointStatePub = m_nh.advertise<sensor_msgs::JointState>("jaka_joint_states", 5);
 
-
         m_jointStateMsg = sensor_msgs::JointState();
         m_jointStateMsg.name.resize(6);
         m_jointStateMsg.position.resize(6);
@@ -53,7 +53,7 @@ public:
         }
 
         m_tfMsg.header.frame_id = m_prefix + "base_link";
-        m_tfMsg.child_frame_id = m_prefix + "ee";
+        m_tfMsg.child_frame_id = m_prefix + "real_ee_link";
     }
 
     void publish_joint_states(const double states[6]) {
@@ -83,7 +83,6 @@ private:
     std::atomic_bool m_isWillQuit;
     std::atomic_bool m_isBusy;
     std::atomic_flag m_flag = ATOMIC_FLAG_INIT;
-
 
 public:
     explicit StackThread() : m_isWillQuit(false), m_isBusy(false) {}
@@ -135,15 +134,17 @@ signals:
     void logoutSignal(int errorCode);
 
     // update power_on and enable
-    void updateBtSignal(int errorCode, bool poweredOn, bool servoEnabled);
+    void updateBtSignal(QString name, int errorCode, bool poweredOn, bool servoEnabled);
 
-    void errorSignal(int errorCode);
+    void errorSignal(QString name, int errorCode);
 
-    void busySignal();
+    void busySignal(QString name);
 
     void updateStatusSignal(bool isAll);
 
     void addInfoSignal(QString info);
+
+    void updateCollisionLevel(int);
 
 private:
     StackThread m_preThread;
@@ -165,8 +166,6 @@ private:
     std::mutex m_execMutex;
     ROSPublisher m_rosPublisher;
 
-    std::atomic_int m_collisionLevel;
-
     std::string m_prefix;
 
 public:
@@ -176,14 +175,9 @@ public:
         m_isWillGetThreadQuit.exchange(false);
         m_getThread = std::thread([&]() {
             RobotStatus status{};
-            ros::Rate rate(15);
-            int collisionLevel = -1;
+            ros::Rate rate(10);
             while (!m_isWillGetThreadQuit.load()) {
-                errno_t res = m_pRobot->get_collision_level(&collisionLevel);
-                if (res == ERR_SUCC) m_collisionLevel.exchange(collisionLevel);
-                else std::cout << "get_collision_level error" << std::endl;
-
-                res = m_pRobot->get_robot_status(&status);
+                errno_t res = m_pRobot->get_robot_status(&status);
                 if (res == ERR_SUCC) {
                     {
                         std::lock_guard<std::mutex> lock(m_getStatusMutex);
@@ -212,7 +206,7 @@ public:
                  ros::NodeHandle &nh,
                  const std::string &prefix) : m_isWillGetThreadQuit(false),
                                               m_rosPublisher(nh, prefix),
-                                              m_collisionLevel(-1), m_prefix(prefix) {
+                                              m_prefix(prefix) {
         m_pRobot = robot;
         m_pRobot->set_prefix(prefix);
         m_preThread.startThread();
@@ -254,11 +248,15 @@ public:
             RobotStatus status;
             if (res == ERR_SUCC) {
                 m_pRobot->get_robot_status(&status);
+                int collisionLevel = -1;
+                errno_t res2 = m_pRobot->get_collision_level(&collisionLevel);
+                if (res2 == ERR_SUCC) emit updateCollisionLevel(collisionLevel);
+                else emit errorSignal("get_collision_level", res2);
                 m_startGetThread();
             }
             emit loginSignal(res, status.emergency_stop != 0, status.powered_on != 0, status.enabled != 0);
         })) {
-            emit busySignal();
+            emit busySignal("login_in");
         }
     }
 
@@ -273,7 +271,7 @@ public:
             std::cout << "log out" << std::endl;
             emit logoutSignal(res);
         })) {
-            emit busySignal();
+            emit busySignal("login_out");
         }
     }
 
@@ -281,37 +279,36 @@ public:
         if (!m_preThread.addAsyncTask([&]() {
             auto res = m_pRobot->power_on();
             qDebug() << "m_preThread";
-            emit updateBtSignal(res, res == ERR_SUCC, false);
+            emit updateBtSignal("power_on", res, res == ERR_SUCC, false);
         })) {
-            emit busySignal();
+            emit busySignal("power_on");
         }
-
     }
 
     void power_off() {
         if (!m_preThread.addAsyncTask([&]() {
             auto res = m_pRobot->power_off();
-            emit updateBtSignal(res, res != ERR_SUCC, false);
+            emit updateBtSignal("power_off", res, res != ERR_SUCC, false);
         })) {
-            emit busySignal();
+            emit busySignal("power_off");
         }
     }
 
     void enable_robot() {
         if (!m_preThread.addAsyncTask([&]() {
             auto res = m_pRobot->enable_robot();
-            emit updateBtSignal(res, true, res == ERR_SUCC);
+            emit updateBtSignal("enable_robot", res, true, res == ERR_SUCC);
         })) {
-            emit busySignal();
+            emit busySignal("enable_robot");
         }
     }
 
     void disable_robot() {
         if (!m_preThread.addAsyncTask([&]() {
             auto res = m_pRobot->disable_robot();
-            emit updateBtSignal(res, true, res != ERR_SUCC);
+            emit updateBtSignal("disable_robot", res, true, res != ERR_SUCC);
         })) {
-            emit busySignal();
+            emit busySignal("disable_robot");
         }
     }
 
@@ -324,13 +321,13 @@ public:
             memcpy(&m_tmpJVal, joint_pos, sizeof(JointValue));
             if (!m_execThread.addAsyncTask([&, move_mode]() {
                 auto res = m_pRobot->joint_move(&m_tmpJVal, move_mode);
-                emit errorSignal(res);
+                emit errorSignal("joint_move", res);
             })) {
-                emit busySignal();
+                emit busySignal("joint_move");
             }
             m_execMutex.unlock();
         } else {
-            emit busySignal();
+            emit busySignal("joint_move");
         }
     }
 
@@ -343,9 +340,10 @@ public:
         if (m_execMutex.try_lock()) {
             int count = 0;
             errno_t res = ERR_SUCC;
+            int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
+                          m_rosPublisher.m_prefix == "right_") ? 6 : 0;
             for (const auto &p:trajectory.joint_trajectory.points) {
                 JointValue jVal;
-                int offset = (p.positions.size() > 6 && m_rosPublisher.m_prefix == "right_") ? 6 : 0;
                 for (int i = 0; i < 6; ++i) {
                     jVal.jVal[i] = p.positions[i + offset];
                 }
@@ -363,12 +361,74 @@ public:
         }
     }
 
+    // 阻塞
+    errno_t trajectory_move_v2(moveit_msgs::RobotTrajectory &trajectory) {
+        if (!m_pRobot->is_login()) {
+            emit addInfoSignal("cannot exec trajectory: robot is not login");
+            return ERR_CUSTOM_NOT_LOGIN;
+        }
+        if (m_execMutex.try_lock()) {
+            int count = 0;
+            errno_t res = ERR_SUCC;
+            res = m_pRobot->servo_move_enable(true);
+            if (res == ERR_SUCC) {
+                int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
+                              m_rosPublisher.m_prefix == "right_") ? 6 : 0;
+                const unsigned int step_num = 1;
+                std::vector<JointValue> jVals;
+
+                for (int i = 1; i < trajectory.joint_trajectory.points.size(); ++i) {
+                    auto &curP = trajectory.joint_trajectory.points[i];
+                    auto &prevP = trajectory.joint_trajectory.points[i - 1];
+                    double startTime = prevP.time_from_start.toSec();
+                    double endTime = curP.time_from_start.toSec();
+                    double ks[6]{};
+                    for (int j = 0; j < 6; j++) {
+                        ks[j] = (curP.positions[j + offset] - prevP.positions[j + offset]) /
+                                (curP.time_from_start.toSec() - prevP.time_from_start.toSec());
+                    }
+                    double curTime = startTime;
+                    while (curTime < endTime) {
+                        JointValue curJVal;
+                        for (int j = 0; j < 6; j++) {
+                            curJVal.jVal[j] = prevP.positions[j + offset] + ks[j] * (curTime - startTime);
+                        }
+                        jVals.emplace_back(curJVal);
+                        curTime += 0.008 * double(step_num);
+                    }
+                }
+                std::cout << "start move" << std::endl;
+                ros::Rate rate(1000.0 / 8.0 / double(step_num));
+                for (const auto &jVal:jVals) {
+                    res = m_pRobot->servo_j(&jVal, ABS, step_num);
+                    if (res != ERR_SUCC) {
+                        for (int j = 0; j < 6; j++)
+                            std::cout << jVal.jVal[j] << ", ";
+                        std::cout << std::endl;
+                        emit errorSignal("servo_j", res);
+                        break;
+                    }
+                    rate.sleep();
+                }
+            } else {
+                emit errorSignal("servo_move_enable(true)", res);
+            }
+            res = m_pRobot->servo_move_enable(false);
+            emit errorSignal("servo_move_enable(false)", res);
+            m_execMutex.unlock();
+            return res;
+        } else {
+            emit addInfoSignal("cannot exec trajectory: robot is moving");
+            return ERR_CUSTOM_IS_MOVING;
+        }
+    }
+
     void set_rapid(double rapid) {
         if (!m_execThread.addAsyncTask([&, rapid]() {
             auto res = m_pRobot->set_rapidrate(rapid);
-            emit errorSignal(res);
+            emit errorSignal("set_rapidrate", res);
         })) {
-            emit busySignal();
+            emit busySignal("set_rapid");
         }
     }
 
@@ -379,48 +439,55 @@ public:
         if (!m_emergencyThread.addAsyncTask([&]() {
             emit addInfoSignal("motion abort...");
             auto res = m_pRobot->motion_abort();
-            emit errorSignal(res);
+            emit errorSignal("motion_abort", res);
             emit addInfoSignal("motion abort complete");
         })) {
-            emit busySignal();
+            emit busySignal("motion_abort");
         }
     }
 
     void collision_recover() {
-        if (!m_execThread.addAsyncTask([&]() {
+        if (!m_emergencyThread.addAsyncTask([&]() {
             auto res = m_pRobot->collision_recover();
-            emit errorSignal(res);
+            emit errorSignal("collision_recover", res);
         })) {
-            emit busySignal();
+            emit busySignal("collision_recover");
         }
-    }
-
-    int get_collision_level() {
-        return m_collisionLevel.load();
     }
 
     void set_collision_level(const int level) {
         if (m_execMutex.try_lock()) {
             if (!m_execThread.addAsyncTask([&, level]() {
                 auto res = m_pRobot->set_collision_level(level);
-                emit errorSignal(res);
+                emit errorSignal("set_collision_level", res);
             })) {
-                emit busySignal();
+                emit busySignal("set_collision_level");
             }
             m_execMutex.unlock();
         } else {
-            emit busySignal();
+            emit busySignal("set_collision_level");
+        }
+    }
+
+    void get_collision_level() {
+        if (!m_preThread.addAsyncTask([&]() {
+            int collisionLevel = -1;
+            errno_t res2 = m_pRobot->get_collision_level(&collisionLevel);
+            if (res2 == ERR_SUCC) emit updateCollisionLevel(collisionLevel);
+            else emit errorSignal("get_collision_level", res2);
+        })) {
+            emit busySignal("get_collision_level");
         }
     }
 
     void set_ee_close(bool close) {
         if (!m_emergencyThread.addAsyncTask([&, close]() {
             auto res = m_pRobot->set_do(m_prefix == "left_" ? 2 : 3, !close);
+            emit errorSignal("set_do", res);
         })) {
-            emit busySignal();
+            emit busySignal("set_ee_close");
         }
     }
-
 };
 
 

@@ -60,7 +60,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                             subWindowList[1]->rm->motion_abort();
                             std::lock_guard<std::mutex> lock(respMutex);
                             resp.success = false;
-                            resp.left_desc.data = DescFactory::getErrorDesc(res);
+                            resp.left_desc.data = ErrorDescFactory::build()->getErrorDesc(res);
                         }
                     });
                 } else {
@@ -73,7 +73,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                             subWindowList[0]->rm->motion_abort();
                             std::lock_guard<std::mutex> lock(respMutex);
                             resp.success = false;
-                            resp.right_desc.data = DescFactory::getErrorDesc(res);
+                            resp.right_desc.data = ErrorDescFactory::build()->getErrorDesc(res);
                         }
                     });
                 } else {

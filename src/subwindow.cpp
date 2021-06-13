@@ -7,6 +7,8 @@ QColor primaryGreenColor = QColor::fromRgb(0x39, 0xa3, 0x0e);
 QColor primaryRedColor = QColor::fromRgb(0xbb, 0x06, 0x06);
 QColor primaryLightGrayColor = QColor::fromRgb(211, 215, 207);
 
+std::mutex SubWindow::printMutex;
+
 SubWindow::SubWindow(ros::NodeHandle &nh,
                      QWidget *parent,
                      const std::string &prefix) : QWidget(parent),
@@ -20,7 +22,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
     setWindowTitle("JAKA GUI");
 
     for (int i = 0; i < 6; ++i) {
-        for (int j = 0; j < 5; ++j) {
+        for (int j = 0; j < 4; ++j) {
             auto *p = new QLabel("---.-");
             if (i % 2 == 0) {
                 p->setAutoFillBackground(true);
@@ -28,8 +30,8 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                 palette.setColor(p->backgroundRole(), primaryLightGrayColor);
                 p->setPalette(palette);
             }
-            p->setMinimumWidth(42);
-            p->setMaximumWidth(42);
+            p->setMinimumWidth(48);
+            p->setMaximumWidth(48);
             p->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             jointInfoLabelList[i].emplace_back(p);
             ui->jValGridLayout->addWidget(p, i + 1, j + 1);
@@ -86,7 +88,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
 
     ipEdit = new IPEdit(this);
     ui->ipLayout->addWidget(ipEdit, 3);
-    ipEdit->setText("192.168.1.103");
+    ipEdit->setText("192.168.0.103");
 
     ui->estopLabel->setAutoFillBackground(true);
     ui->inCollisionLabel->setAutoFillBackground(true);
@@ -105,7 +107,10 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
     ui->loginBt->setPalette(palette);
 
     std::string ip;
-    if (!ros::param::get("~" + prefix + "ip", ip)) ip = "192.168.1.100";
+    if (!ros::param::get("~" + prefix + "ip", ip)) {
+        ip = "192.168.0.101";
+        if (prefix == "right_") ip = "192.168.0.100";
+    }
 
     ipEdit->setText(QString::fromStdString(ip));
     ui->typeLabel->setText(QString::fromStdString(prefix));
@@ -120,26 +125,29 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                 // init
                 resp.success = true;
                 // print info
-                std::cout << "recv " << m_prefix << "trajectory" << std::endl;
-                bprinter::TablePrinter tp(&std::cout);
-                tp.AddColumn("", 4);
-                for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
-                    tp.AddColumn(joint_name, 13);
+                {
+                    std::lock_guard<std::mutex> lock(printMutex);
+                    std::cout << "recv " << m_prefix << "trajectory" << std::endl;
+                    bprinter::TablePrinter tp(&std::cout);
+                    tp.AddColumn("", 4);
+                    for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
+                        tp.AddColumn(joint_name, 13);
+                    }
+                    tp.PrintHeader();
+                    for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
+                        auto &p = req.trajectory.joint_trajectory.points[i];
+                        tp << i;
+                        for (double position : p.positions)
+                            tp << int(position / M_PI * 180.0 * 10) / 10.0;
+                    }
+                    tp.PrintFooter();
                 }
-                tp.PrintHeader();
-                for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
-                    auto &p = req.trajectory.joint_trajectory.points[i];
-                    tp << i;
-                    for (double position : p.positions)
-                        tp << int(position / M_PI * 180.0 * 10) / 10.0;
-                }
-                tp.PrintFooter();
                 // exec
                 rm->set_ee_close(req.ee_close_at_start);
-                auto res = rm->trajectory_move(req.trajectory);
+                auto res = rm->trajectory_move_v2(req.trajectory);
                 if (res != ERR_SUCC) {
                     resp.success = false;
-                    resp.desc.data = DescFactory::getErrorDesc(res);
+                    resp.desc.data = ErrorDescFactory::build()->getErrorDesc(res);
                 } else {
 //                    rm->set_ee_close(req.ee_close_at_end);
                 }
@@ -167,24 +175,23 @@ SubWindow::~SubWindow() {
 
 void SubWindow::onLogin(int errorCode, bool estoped, bool poweredOn, bool servoEnabled) {
     if (errorCode == ERR_SUCC) {
-        ui->loginBt->setEnabled(true);
         ui->loginBt->setText("log out");
         if (estoped) {
-            showErrorBox(ERR_EMERGENCY_PRESSED);
+            showErrorBox("SubWindow::onLogin", ERR_EMERGENCY_PRESSED);
         }
-        onUpdateBt(ERR_SUCC, poweredOn, servoEnabled);
+        onUpdateBt("SubWindow::onLogin", ERR_SUCC, poweredOn, servoEnabled);
         auto palette = ui->loginBt->palette();
         palette.setColor(ui->loginBt->backgroundRole(), primaryRedColor);
         ui->loginBt->setPalette(palette);
         setLabelStatus(ui->estopLabel, estoped ? STATUS_RED : STATUS_GREEN);
     } else {
-        showErrorBox(errorCode);
+        showErrorBox("SubWindow::onLogin", errorCode);
     }
+    ui->loginBt->setEnabled(true);
 }
 
 void SubWindow::onLogout(int errorCode) {
     if (errorCode == ERR_SUCC) {
-        ui->loginBt->setEnabled(true);
         ui->loginBt->setText("log in");
         ui->powerOnBt->setEnabled(false);
         ui->powerOnBt->setText("power on");
@@ -196,15 +203,16 @@ void SubWindow::onLogout(int errorCode) {
         ui->loginBt->setPalette(palette);
         clearAllStatus();
     } else {
-        showErrorBox(errorCode);
+        showErrorBox("SubWindow::onLogout", errorCode);
     }
+    ui->loginBt->setEnabled(true);
 }
 
 
-void SubWindow::showErrorBox(int errorCode) {
+void SubWindow::showErrorBox(QString name, int errorCode) {
     if (errorCode != ERR_SUCC)
         QMessageBox::critical(this, "Error",
-                              QString::fromStdString(DescFactory::getErrorDesc(errorCode)),
+                              name + ":" + QString::fromStdString(ErrorDescFactory::build()->getErrorDesc(errorCode)),
                               QMessageBox::Ok);
 }
 
@@ -310,15 +318,13 @@ void SubWindow::onUpdateStatus(bool isAll) {
     rm->get_robot_status(&status, qua);
     if (isAll) {
         for (int i = 0; i < 6; ++i) {
-            jointInfoLabelList[i][4]->setText(QString::number(status.joint_position[i] / M_PI * 180.0, 'f', 1));
-            jointInfoLabelList[i][1]->setText(
-                    QString::number(status.robot_monitor_data.jointMonitorData[i].instVoltage, 'f', 1));
-            jointInfoLabelList[i][2]->setText(
-                    QString::number(status.robot_monitor_data.jointMonitorData[i].instCurrent, 'f', 1));
-            jointInfoLabelList[i][3]->setText(
-                    QString::number(status.robot_monitor_data.jointMonitorData[i].instTemperature, 'f', 1));
+            jointInfoLabelList[i][3]->setText(QString::number(status.joint_position[i] / M_PI * 180.0, 'f', 1));
             jointInfoLabelList[i][0]->setText(
-                    QString::number(status.torq_sensor_monitor_data.actTorque[i] * 1000.0, 'f', 1));
+                    QString::number(status.robot_monitor_data.jointMonitorData[i].instVoltage, 'f', 1));
+            jointInfoLabelList[i][1]->setText(
+                    QString::number(status.robot_monitor_data.jointMonitorData[i].instCurrent, 'f', 1));
+            jointInfoLabelList[i][2]->setText(
+                    QString::number(status.robot_monitor_data.jointMonitorData[i].instTemperature, 'f', 1));
             double temp = status.cartesiantran_position[i];
             if (i >= 3) temp = temp / M_PI * 180.0;
             posInfoLabelList[i]->setText(QString::number(temp, 'f', 1));
@@ -330,9 +336,7 @@ void SubWindow::onUpdateStatus(bool isAll) {
         ui->avgALabel->setText(QString::number(status.robot_monitor_data.robotAverageCurrent, 'f', 1));
         ui->rapidLabel->setText(QString::number(status.rapidrate, 'f', 2));
         ui->curToolLabel->setText(QString::number(status.current_tool_id));
-        auto level = rm->get_collision_level();
-        level = (level > 0 && level < 6) ? level : 6;
-        ui->collisionLevelComboBox->setCurrentIndex(level);
+
 
         setLabelStatus(ui->powerOnLabel, status.powered_on == 0 ? STATUS_RED : STATUS_GREEN);
         setLabelStatus(ui->enableLabel, status.enabled == 0 ? STATUS_RED : STATUS_GREEN);
@@ -369,8 +373,8 @@ void SubWindow::onUpdateStatus(bool isAll) {
     memcpy(curJVal, status.joint_position, sizeof(curJVal));
 }
 
-void SubWindow::onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled) {
-    showErrorBox(errorCode);
+void SubWindow::onUpdateBt(QString name, int errorCode, bool poweredOn, bool servoEnabled) {
+    showErrorBox(name, errorCode);
     ui->powerOnBt->setText(poweredOn ? "power off" : "power on");
     ui->enableBt->setText(servoEnabled ? "disable" : "enable");
 
@@ -413,14 +417,18 @@ void SubWindow::on_collisionRecoverBt_clicked() {
     rm->collision_recover();
 }
 
-void SubWindow::onBusy() {
-    QMessageBox::warning(this, "Warning", "上一任务尚未结束", QMessageBox::Ok);
+void SubWindow::onBusy(QString name) {
+    QMessageBox::warning(this, "Warning", name + ": 上一任务尚未结束", QMessageBox::Ok);
 }
 
 void SubWindow::onJointMoveBtClicked(int index) {
     JointValue jVal{};
     jVal.jVal[index % 6] =
             index < 6 ? ui->stepSpinBox->value() / 180.0 * M_PI : -ui->stepSpinBox->value() / 180.0 * M_PI;
+//    for (const auto &val:jVal.jVal) {
+//        std::cout << val << ",";
+//    }
+//    std::cout << std::endl;
     rm->set_spin_speed(ui->velocitySpinBox->value() / 180.0 * M_PI);
     rm->joint_move(&jVal, INCR);
 }
@@ -487,6 +495,7 @@ void SubWindow::updateRMConnection(RobotManager *old, RobotManager *cur) {
         disconnect(old, &RobotManager::updateBtSignal, this, &SubWindow::onUpdateBt);
         disconnect(old, &RobotManager::busySignal, this, &SubWindow::onBusy);
         disconnect(old, &RobotManager::addInfoSignal, this, &SubWindow::onAddInfo);
+        disconnect(old, &RobotManager::updateCollisionLevel, this, &SubWindow::onUpdateCollisionLevel);
     }
     connect(cur, &RobotManager::loginSignal, this, &SubWindow::onLogin);
     connect(cur, &RobotManager::logoutSignal, this, &SubWindow::onLogout);
@@ -495,11 +504,21 @@ void SubWindow::updateRMConnection(RobotManager *old, RobotManager *cur) {
     connect(cur, &RobotManager::updateBtSignal, this, &SubWindow::onUpdateBt);
     connect(cur, &RobotManager::busySignal, this, &SubWindow::onBusy);
     connect(cur, &RobotManager::addInfoSignal, this, &SubWindow::onAddInfo);
+    connect(cur, &RobotManager::updateCollisionLevel, this, &SubWindow::onUpdateCollisionLevel);
+
 }
 
 void SubWindow::on_collisionLevelComboBox_currentIndexChanged(int index) {
     if (index > 0 && index < 6) rm->set_collision_level(index);
-    else showErrorBox(ERR_INVALID_PARAMETER);
+    else showErrorBox("SubWindow::on_collisionLevelComboBox_currentIndexChanged", ERR_INVALID_PARAMETER);
+    QTimer::singleShot(200, this, [&]() {
+        rm->get_collision_level();
+        qDebug() << "collision level updated";
+    });
 }
 
+void SubWindow::onUpdateCollisionLevel(int level) {
+    level = (level > 0 && level < 6) ? level : 6;
+    ui->collisionLevelComboBox->setCurrentIndex(level);
+}
 

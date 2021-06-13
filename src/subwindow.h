@@ -37,9 +37,9 @@ private slots:
 
     void onLogout(int errorCode);
 
-    void onUpdateBt(int errorCode, bool poweredOn, bool servoEnabled);
+    void onUpdateBt(QString name, int errorCode, bool poweredOn, bool servoEnabled);
 
-    void onBusy();
+    void onBusy(QString);
 
     void onJointMoveBtClicked(int);
 
@@ -74,8 +74,12 @@ private slots:
 
 public:
     RobotManager *rm;
+    static std::mutex printMutex;
+
 
 private:
+
+
     Ui::SubWindow *ui;
 
     std::vector<QLabel *> jointInfoLabelList[6];
@@ -102,7 +106,7 @@ private:
         STATUS_GREEN, STATUS_RED, STATUS_ORANGE, STATUS_UNKNOWN, STATUS_GRAY
     };
 
-    void showErrorBox(int errorCode);
+    void showErrorBox(QString name, int errorCode);
 
     void setLabelStatus(QLabel *label, emStatusType on);
 
@@ -112,8 +116,12 @@ private:
 
     void updateRMConnection(RobotManager *old, RobotManager *cur);
 
+    void onUpdateCollisionLevel(int);
+
     int jointUpdateCount = 0;
 
 };
+
+
 
 #endif // MAINWINDOW_H
