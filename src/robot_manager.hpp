@@ -33,10 +33,7 @@ private:
     geometry_msgs::TransformStamped m_tfMsg;
 
     ros::Publisher m_jointStatePub;
-    ros::Publisher m_posePub;
     tf2_ros::TransformBroadcaster m_tfPub;
-
-    JAKAZuRobot m_robot;
 
 public:
     const std::string m_prefix;
@@ -79,19 +76,23 @@ public:
 class StackThread {
 private:
     std::thread m_t;
-    std::function<void(void)> m_func = nullptr;
+    std::function<void(void)> m_taskFunc = nullptr;
     std::atomic_bool m_isWillQuit;
-    std::atomic_bool m_isBusy;
+    std::atomic_bool m_isReady;
     std::atomic_flag m_flag = ATOMIC_FLAG_INIT;
 
+    std::condition_variable m_cv;
+    std::mutex m_mutex;
+
 public:
-    explicit StackThread() : m_isWillQuit(false), m_isBusy(false) {}
+    explicit StackThread() : m_isWillQuit(false), m_isReady(false) {}
 
     /* 多线程调用安全 */
     bool addAsyncTask(std::function<void(void)> &&taskFunc) {
         if (!m_flag.test_and_set()) {
-            m_func = taskFunc;
-            m_isBusy.exchange(true);
+            m_taskFunc = taskFunc;
+            m_isReady.exchange(true);
+            m_cv.notify_all();
             return true;
         } else {
             return false;
@@ -101,21 +102,22 @@ public:
     void startThread() {
         m_t = std::thread([&]() {
             while (!m_isWillQuit.load()) {
-                if (m_isBusy.load()) {
-                    if (m_func) {
-                        m_func();
-                        m_func = nullptr;
-                    }
-                    m_isBusy.exchange(false);
-                    m_flag.clear();
+                std::unique_lock<std::mutex> lk(m_mutex);
+                m_cv.wait(lk, [&] { return m_isReady.load() || m_isWillQuit.load(); });
+                if (m_taskFunc) {
+                    m_taskFunc();
+                    m_taskFunc = nullptr;
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                m_isReady.exchange(false);
+                m_flag.clear();
+                lk.unlock();
             }
         });
     }
 
     void terminate() {
         m_isWillQuit.exchange(true);
+        m_cv.notify_all();
         if (m_t.joinable()) m_t.join();
     }
 
