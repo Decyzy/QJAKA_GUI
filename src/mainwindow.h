@@ -8,6 +8,7 @@
 #include "subwindow.h"
 #include <QStatusBar>
 #include "qjaka_gui/DualRobotJointMoveService.h"
+#include "qjaka_gui/DigitalOutputService.h"
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <moveit_msgs/RobotTrajectory.h>
@@ -34,6 +35,8 @@ private:
 
     ros::NodeHandle nh;
     ros::ServiceServer m_trajectorySrv;
+    ros::ServiceServer m_doSrv;
+
     ros::AsyncSpinner spinner;
 
     void onTimeout();

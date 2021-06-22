@@ -101,7 +101,7 @@ add_service_files(
     FILES
     JointMoveService.srv
     DualRobotJointMoveService.srv
-
+    DigitalOutputService.srv
 )
 
 ## Generate actions in the 'action' folder

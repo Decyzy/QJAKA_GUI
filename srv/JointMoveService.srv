@@ -1,8 +1,17 @@
 Header header
 moveit_msgs/RobotTrajectory trajectory
-bool ee_close_at_start
-bool is_pick_at_end
-bool is_place_at_end
+float64[] joint_values
+int32 max_buf
+float64 kp
+float64 kv
+float64 ka
+uint8 step_num
+#bool left_ee_open_at_start
+#bool left_ee_open_at_end
+#bool right_ee_open_at_start
+#bool right_ee_open_at_end
+#uint8 left_ee_do_index
+#uint8 right_ee_do_index
 ---
 bool success
-std_msgs/String desc
+string desc

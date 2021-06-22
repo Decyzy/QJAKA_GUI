@@ -28,12 +28,22 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
     connect(&timer, &QTimer::timeout, this, &MainWindow::onTimeout);
     timer.start(500);
 
-    // todo: 对单个机械臂提供单独服务
-    m_trajectorySrv = nh.advertiseService<qjaka_gui::DualRobotJointMoveService::Request, qjaka_gui::DualRobotJointMoveService::Response>(
-            "dual_trajectory_srv",
-            [&](qjaka_gui::DualRobotJointMoveService::Request &req, qjaka_gui::DualRobotJointMoveService::Response &resp) -> bool {
-                // init
+    m_doSrv = nh.advertiseService<qjaka_gui::DigitalOutputService::Request, qjaka_gui::DigitalOutputService::Response>(
+            "digital_output_srv",
+            [&](qjaka_gui::DigitalOutputService::Request &req,
+                qjaka_gui::DigitalOutputService::Response &resp) -> bool {
+                std::cout << "recv do request" << std::endl;
+                RobotManager *rm = subWindowList[1]->rm;
+                rm->set_do(req.index, req.enable);
+
                 resp.success = true;
+                resp.desc = "";
+                return true;
+            });
+
+    m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
+            "dual_trajectory_srv",
+            [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
                 // print info
                 std::cout << "recv trajectory" << std::endl;
                 bprinter::TablePrinter tp(&std::cout);
@@ -53,32 +63,37 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 std::mutex respMutex;
                 std::thread t0;
                 std::thread t1;
-                if (req.prefix.data == "left_" || req.trajectory.joint_trajectory.joint_names.size() > 6) {
-                    t0 = std::thread([&]() {
-                        auto res = subWindowList[0]->rm->trajectory_move(req.trajectory);
-                        if (res != ERR_SUCC) {
-                            subWindowList[1]->rm->motion_abort();
-                            std::lock_guard<std::mutex> lock(respMutex);
-                            resp.success = false;
-                            resp.left_desc.data = ErrorDescFactory::build()->getErrorDesc(res);
-                        }
-                    });
-                } else {
-                    resp.left_desc.data = "不关我事";
-                }
-                if (req.prefix.data == "right_" || req.trajectory.joint_trajectory.joint_names.size() > 6) {
-                    t1 = std::thread([&]() {
-                        auto res = subWindowList[1]->rm->trajectory_move(req.trajectory);
-                        if (res != ERR_SUCC) {
-                            subWindowList[0]->rm->motion_abort();
-                            std::lock_guard<std::mutex> lock(respMutex);
-                            resp.success = false;
-                            resp.right_desc.data = ErrorDescFactory::build()->getErrorDesc(res);
-                        }
-                    });
-                } else {
-                    resp.right_desc.data = "不关我事";
-                }
+                resp.success = true;
+                t0 = std::thread([&]() {
+                    errno_t res;
+                    if (subWindowList[0]->rm->is_own_virtual()) {
+                        res = subWindowList[0]->rm->trajectory_move(req.trajectory);
+                    } else {
+                        res = subWindowList[0]->rm->trajectory_move_v2(req.joint_values, req.step_num);
+                    }
+                    if (res != ERR_SUCC) {
+                        subWindowList[1]->rm->motion_abort();
+                        std::lock_guard<std::mutex> lock(respMutex);
+                        resp.success = false;
+                        resp.desc += "left:" + ErrorDescFactory::build()->getErrorDesc(res);
+                    }
+                });
+
+                t1 = std::thread([&]() {
+                    errno_t res;
+                    if (subWindowList[1]->rm->is_own_virtual()) {
+                        res = subWindowList[1]->rm->trajectory_move(req.trajectory);
+                    } else {
+                        res = subWindowList[1]->rm->trajectory_move_v2(req.joint_values, req.step_num);
+                    }
+                    if (res != ERR_SUCC) {
+                        subWindowList[0]->rm->motion_abort();
+                        std::lock_guard<std::mutex> lock(respMutex);
+                        resp.success = false;
+                        resp.desc += "right:" + ErrorDescFactory::build()->getErrorDesc(res);
+                    }
+                });
+
                 if (t0.joinable()) t0.join();
                 if (t1.joinable()) t1.join();
 

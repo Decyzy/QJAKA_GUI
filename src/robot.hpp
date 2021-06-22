@@ -71,7 +71,7 @@ private:
     void m_updatePose_unsafe() {
         try {
             geometry_msgs::TransformStamped trans = m_tfBuffer.lookupTransform(m_prefix + "base_link",
-                                                                               m_prefix + "ee_link",
+                                                                               m_prefix + "gripper_base_link",
                                                                                ros::Time(0));
             tf2::Quaternion qua;
             tf2::convert(trans.transform.rotation, qua);
@@ -83,7 +83,7 @@ private:
             m_status.cartesiantran_position[2] = trans.transform.translation.z * 1000.0;
         }
         catch (tf2::TransformException &ex) {
-            ROS_WARN_ONCE("%s", ex.what());
+            ROS_ERROR_ONCE_NAMED("qjaka_gui", "%s", ex.what());
             m_status.cartesiantran_position[0] = 0.0;
         }
     }
@@ -102,6 +102,8 @@ public:
     bool is_login() {
         return m_isLogin.load();
     }
+
+    virtual bool is_virtual() { return true; }
 
     void set_prefix(const std::string &prefix) {
         m_prefix = prefix;
@@ -200,6 +202,10 @@ public:
         return ERR_SUCC;
     }
 
+    virtual errno_t servo_move_use_joint_MMF(int max_buf, double kp, double kv, double ka) {
+        return ERR_SUCC;
+    }
+
     virtual errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) {
         return joint_move(joint_pos, move_mode);
     }
@@ -293,12 +299,15 @@ public:
         std::cout << "jaka sdk version: " << version << std::endl;
     }
 
+    bool is_virtual() override { return false; }
+
+
     errno_t login_in(const char *ip) override {
         std::cout << "login real robot" << std::endl;
         auto res = m_robot.login_in(ip);
         std::cout << "login complete" << std::endl;
         if (res == ERR_SUCC) {
-            auto r = m_robot.set_error_handler([](int errorCode){
+            auto r = m_robot.set_error_handler([](int errorCode) {
                 std::cout << "ERROR!! error code = " << errorCode << std::endl;
             });
             std::cout << "set_error_handler: " << r << std::endl;
@@ -345,6 +354,10 @@ public:
 
     errno_t servo_move_enable(bool enable) override {
         return m_robot.servo_move_enable(enable ? TRUE : FALSE);
+    }
+
+    errno_t servo_move_use_joint_MMF(int max_buf, double kp, double kv, double ka) override {
+        return m_robot.servo_move_use_joint_MMF(max_buf, kp, kv, ka);
     }
 
     errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) override {

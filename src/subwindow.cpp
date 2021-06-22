@@ -143,13 +143,24 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                     tp.PrintFooter();
                 }
                 // exec
-                rm->set_ee_close(req.ee_close_at_start);
-                auto res = rm->trajectory_move_v2(req.trajectory);
+                errno_t res;
+//                if (m_prefix == "right_") {
+//                    rm->set_do(req.left_ee_do_index, req.left_ee_open_at_start);
+//                    rm->set_do(req.right_ee_do_index, req.right_ee_open_at_start);
+//                }
+                if (rm->is_own_virtual()) {
+                    res = rm->trajectory_move(req.trajectory);
+                } else {
+                    res = rm->trajectory_move_v2(req.joint_values, req.step_num, req.max_buf, req.kp, req.kv, req.ka);
+                }
                 if (res != ERR_SUCC) {
                     resp.success = false;
-                    resp.desc.data = ErrorDescFactory::build()->getErrorDesc(res);
+                    resp.desc = ErrorDescFactory::build()->getErrorDesc(res);
                 } else {
-//                    rm->set_ee_close(req.ee_close_at_end);
+//                    if (m_prefix == "right_") {
+//                        rm->set_do(req.left_ee_do_index, req.left_ee_open_at_end);
+//                        rm->set_do(req.right_ee_do_index, req.right_ee_open_at_end);
+//                    }
                 }
                 // finish
                 std::cout << "exec trajectory finished" << std::endl;

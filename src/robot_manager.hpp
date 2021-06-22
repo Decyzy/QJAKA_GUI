@@ -77,7 +77,7 @@ class StackThread {
 private:
     std::thread m_t;
     std::function<void(void)> m_taskFunc = nullptr;
-    std::atomic_bool m_isWillQuit;
+    std::atomic_bool m_willQuit;
     std::atomic_bool m_isReady;
     std::atomic_flag m_flag = ATOMIC_FLAG_INIT;
 
@@ -85,7 +85,7 @@ private:
     std::mutex m_mutex;
 
 public:
-    explicit StackThread() : m_isWillQuit(false), m_isReady(false) {}
+    explicit StackThread() : m_willQuit(false), m_isReady(false) {}
 
     /* 多线程调用安全 */
     bool addAsyncTask(std::function<void(void)> &&taskFunc) {
@@ -101,9 +101,9 @@ public:
 
     void startThread() {
         m_t = std::thread([&]() {
-            while (!m_isWillQuit.load()) {
+            while (!m_willQuit.load()) {
                 std::unique_lock<std::mutex> lk(m_mutex);
-                m_cv.wait(lk, [&] { return m_isReady.load() || m_isWillQuit.load(); });
+                m_cv.wait(lk, [&] { return m_isReady.load() || m_willQuit.load(); });
                 if (m_taskFunc) {
                     m_taskFunc();
                     m_taskFunc = nullptr;
@@ -116,7 +116,7 @@ public:
     }
 
     void terminate() {
-        m_isWillQuit.exchange(true);
+        m_willQuit.exchange(true);
         m_cv.notify_all();
         if (m_t.joinable()) m_t.join();
     }
@@ -154,7 +154,7 @@ private:
     StackThread m_emergencyThread;
 
     std::thread m_getThread;
-    std::atomic_bool m_isWillGetThreadQuit;
+    std::atomic_bool m_getThreadWillQuit;
 
     std::string m_currIP;
     JointValue m_tmpJVal{};
@@ -174,20 +174,20 @@ public:
     void m_startGetThread() {
         m_terminateGetThread();
 
-        m_isWillGetThreadQuit.exchange(false);
+        m_getThreadWillQuit.exchange(false);
         m_getThread = std::thread([&]() {
             RobotStatus status{};
             ros::Rate rate(10);
-            while (!m_isWillGetThreadQuit.load()) {
+            while (!m_getThreadWillQuit.load()) {
                 errno_t res = m_pRobot->get_robot_status(&status);
                 if (res == ERR_SUCC) {
                     {
                         std::lock_guard<std::mutex> lock(m_getStatusMutex);
                         memcpy(&m_status, &status, sizeof(RobotStatus));
+                        m_rosPublisher.publish_ee_tf(status.cartesiantran_position, m_qua);
                     }
                     emit updateStatusSignal(true);
                     m_rosPublisher.publish_joint_states(status.joint_position);
-                    m_rosPublisher.publish_ee_tf(status.cartesiantran_position, m_qua);
                 } else {
                     std::cout << "get_robot_status error" << std::endl;
                 }
@@ -199,14 +199,14 @@ public:
     }
 
     void m_terminateGetThread() {
-        m_isWillGetThreadQuit.exchange(true);
+        m_getThreadWillQuit.exchange(true);
         if (m_getThread.joinable()) m_getThread.join();
     }
 
 public:
     RobotManager(VirtualRobot *robot,
                  ros::NodeHandle &nh,
-                 const std::string &prefix) : m_isWillGetThreadQuit(false),
+                 const std::string &prefix) : m_getThreadWillQuit(false),
                                               m_rosPublisher(nh, prefix),
                                               m_prefix(prefix) {
         m_pRobot = robot;
@@ -217,10 +217,13 @@ public:
     }
 
     ~RobotManager() override {
-        m_isWillGetThreadQuit.exchange(true);
+        m_getThreadWillQuit.exchange(true);
         if (m_getThread.joinable()) m_getThread.join();
     }
 
+    bool is_own_virtual() {
+        return m_pRobot->is_virtual();
+    }
 
     void get_robot_status(RobotStatus *status, tf2::Quaternion &qua) {
         std::lock_guard<std::mutex> lock(m_getStatusMutex);
@@ -372,6 +375,7 @@ public:
         if (m_execMutex.try_lock()) {
             int count = 0;
             errno_t res = ERR_SUCC;
+            m_pRobot->servo_move_use_joint_MMF(20, 0.075, 0.1, 0.6);
             res = m_pRobot->servo_move_enable(true);
             if (res == ERR_SUCC) {
                 int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
@@ -400,12 +404,72 @@ public:
                     }
                 }
                 std::cout << "start move" << std::endl;
-                ros::Rate rate(1000.0 / 8.0 / double(step_num));
+                ros::Rate rate(1000.0 / 7.5 / double(step_num));
                 for (const auto &jVal:jVals) {
                     res = m_pRobot->servo_j(&jVal, ABS, step_num);
                     if (res != ERR_SUCC) {
                         for (int j = 0; j < 6; j++)
                             std::cout << jVal.jVal[j] << ", ";
+                        std::cout << std::endl;
+                        emit errorSignal("servo_j", res);
+                        break;
+                    }
+                    rate.sleep();
+                }
+            } else {
+                emit errorSignal("servo_move_enable(true)", res);
+            }
+            res = m_pRobot->servo_move_enable(false);
+            emit errorSignal("servo_move_enable(false)", res);
+            m_execMutex.unlock();
+            return res;
+        } else {
+            emit addInfoSignal("cannot exec trajectory: robot is moving");
+            return ERR_CUSTOM_IS_MOVING;
+        }
+    }
+
+    // 阻塞
+    /**
+     * 滤波器参数都是越大越精确
+     * @param jVals
+     * @param step_num 1
+     * @param max_buf 20
+     * @param kp 0.1, 0.05 ~ 0.3
+     * @param kv 0.2, 0.1 ~ 0.5
+     * @param ka 0.6, 0.5 ~ 0.9
+     * @return
+     */
+    errno_t trajectory_move_v2(std::vector<double> &jVals, const unsigned int step_num = 1,
+                               int max_buf = 20, double kp = 0.1, double kv = 0.2, double ka = 0.6) {
+
+        if (!m_pRobot->is_login()) {
+            emit addInfoSignal("cannot exec trajectory: robot is not login");
+            return ERR_CUSTOM_NOT_LOGIN;
+        }
+        if (m_execMutex.try_lock()) {
+            errno_t res = ERR_SUCC;
+            res = m_pRobot->servo_move_use_joint_MMF(max_buf, 0.05, 0.1, 0.5);
+            emit errorSignal("servo_move_use_joint_MMF", res);
+
+            res = m_pRobot->servo_move_enable(true);
+            if (res == ERR_SUCC) {
+                std::cout << "start move" << std::endl;
+                ros::Rate rate(1000.0 / 7.6 / double(step_num));
+                int i = 0;
+                JointValue _jVal;
+                while (i < jVals.size()) {
+                    _jVal.jVal[0] = jVals[i];
+                    _jVal.jVal[1] = jVals[i + 1];
+                    _jVal.jVal[2] = jVals[i + 2];
+                    _jVal.jVal[3] = jVals[i + 3];
+                    _jVal.jVal[4] = jVals[i + 4];
+                    _jVal.jVal[5] = jVals[i + 5];
+                    i += 6;
+                    res = m_pRobot->servo_j(&_jVal, ABS, step_num);
+                    if (res != ERR_SUCC) {
+                        for (int j = 0; j < 6; j++)
+                            std::cout << _jVal.jVal[j] << ", ";
                         std::cout << std::endl;
                         emit errorSignal("servo_j", res);
                         break;
@@ -482,12 +546,12 @@ public:
         }
     }
 
-    void set_ee_close(bool close) {
-        if (!m_emergencyThread.addAsyncTask([&, close]() {
-            auto res = m_pRobot->set_do(m_prefix == "left_" ? 2 : 3, !close);
+    void set_do(int index, bool enable) {
+        if (!m_emergencyThread.addAsyncTask([&, index, enable]() {
+            auto res = m_pRobot->set_do(index, enable);
             emit errorSignal("set_do", res);
         })) {
-            emit busySignal("set_ee_close");
+            emit busySignal("set_ee_open");
         }
     }
 };
