@@ -6,19 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1450</width>
+    <width>1500</width>
     <height>256</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>1450</width>
+    <width>1500</width>
     <height>200</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>1450</width>
+    <width>1500</width>
     <height>308</height>
    </size>
   </property>
@@ -188,6 +188,12 @@ border-radius: 4px;</string>
        </item>
        <item row="3" column="0">
         <widget class="QLabel" name="label_2">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="styleSheet">
           <string notr="true">background-color: rgb(211, 215, 207);</string>
          </property>
@@ -220,7 +226,7 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="label">
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>56</width>
            <height>16777215</height>
           </size>
          </property>
@@ -237,6 +243,12 @@ border-radius: 4px;</string>
        </item>
        <item row="2" column="0">
         <widget class="QLabel" name="label_4">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="text">
           <string>Joint 2</string>
          </property>
@@ -247,6 +259,12 @@ border-radius: 4px;</string>
        </item>
        <item row="0" column="0">
         <widget class="QLabel" name="jointUpdateLabel">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="text">
           <string>====</string>
          </property>
@@ -267,6 +285,12 @@ border-radius: 4px;</string>
        </item>
        <item row="6" column="0">
         <widget class="QLabel" name="label_7">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="text">
           <string>Joint 6</string>
          </property>
@@ -274,6 +298,12 @@ border-radius: 4px;</string>
        </item>
        <item row="4" column="0">
         <widget class="QLabel" name="label_3">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="text">
           <string>Joint 4</string>
          </property>
@@ -281,6 +311,12 @@ border-radius: 4px;</string>
        </item>
        <item row="5" column="0">
         <widget class="QLabel" name="label_5">
+         <property name="maximumSize">
+          <size>
+           <width>56</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="styleSheet">
           <string notr="true">background-color: rgb(211, 215, 207);</string>
          </property>
@@ -300,13 +336,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="powerOnLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -322,13 +358,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="enableLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -344,13 +380,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="inPosLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -366,13 +402,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="inCollisionLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -388,13 +424,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="estopLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -410,13 +446,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="limitLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -432,13 +468,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="dragLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>
@@ -454,13 +490,13 @@ border-radius: 4px;</string>
         <widget class="QLabel" name="sdkLabel">
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>48</width>
            <height>0</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>16777215</width>
+           <width>48</width>
            <height>16777215</height>
           </size>
          </property>

@@ -40,6 +40,7 @@ private:
     std::atomic_bool m_isCurAbort;
     std::atomic_int m_collisionLevel;
     std::string m_prefix;
+    std::chrono::high_resolution_clock::time_point m_lastServoMove{};
 
 
     // !! 线程不安全, 使用前需要上锁
@@ -107,6 +108,17 @@ public:
 
     void set_prefix(const std::string &prefix) {
         m_prefix = prefix;
+    }
+
+    void set_initial_status() {
+        double jVal[6] = {-100.0, 150, -140, 180, 90, 0.0};
+        if (m_prefix == "right_") {
+            double temp[6] = {120.0, 10, 140, 0, -100, 0.0};
+            memcpy(jVal, temp, sizeof(jVal));
+        }
+        for (int i = 0; i < 6; ++i) {
+            m_status.joint_position[i] = jVal[i] / 180.0 * M_PI;
+        }
     }
 
     virtual errno_t login_in(const char *ip) {
@@ -194,8 +206,7 @@ public:
         while (m_isMoving.load()) {
             sleepMilliseconds(1);
         }
-        if (m_isCurAbort.load()) return ERR_CUSTOM_RECV_ABORT;
-        else return ERR_SUCC;
+        return m_isCurAbort.load() ? ERR_CUSTOM_RECV_ABORT : ERR_SUCC;
     }
 
     virtual errno_t servo_move_enable(bool enable) {
@@ -207,7 +218,24 @@ public:
     }
 
     virtual errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) {
-        return joint_move(joint_pos, move_mode);
+        if (m_isMoving.load()) return ERR_CUSTOM_IS_MOVING;
+        auto t = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - m_lastServoMove).count();
+        if (8 > t) {
+            sleepMilliseconds(8 - t);
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (int i = 0; i < 6; ++i) {
+                if (move_mode == INCR) {
+                    m_status.joint_position[i] += joint_pos->jVal[i];
+                } else {
+                    m_status.joint_position[i] = joint_pos->jVal[i];
+                }
+            }
+            m_lastServoMove = std::chrono::high_resolution_clock::now();
+        }
+        return m_isCurAbort.load() ? ERR_CUSTOM_RECV_ABORT : ERR_SUCC;
     }
 
     virtual errno_t motion_abort() {
@@ -296,6 +324,7 @@ public:
 //        Eigen::Vector3d angle = quaternion.matrix().eulerAngles(2, 1, 0);
 //        qDebug() << angle(2) << ", " << angle(1) << "" << angle(0);
 
+
         std::cout << "jaka sdk version: " << version << std::endl;
     }
 
@@ -349,7 +378,8 @@ public:
     }
 
     errno_t joint_move(const JointValue *joint_pos, MoveMode move_mode) override {
-        return m_robot.joint_move(joint_pos, move_mode, true, m_radPerSecond);
+        return m_robot.joint_move(joint_pos, move_mode, TRUE, m_radPerSecond, 360.0 / 180.0 * M_PI, 1.0 / 180.0 * M_PI,
+                                  nullptr);
     }
 
     errno_t servo_move_enable(bool enable) override {

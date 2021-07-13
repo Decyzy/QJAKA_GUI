@@ -30,8 +30,8 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                 palette.setColor(p->backgroundRole(), primaryLightGrayColor);
                 p->setPalette(palette);
             }
-            p->setMinimumWidth(48);
-            p->setMaximumWidth(48);
+            p->setMinimumWidth(54);
+            p->setMaximumWidth(54);
             p->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             jointInfoLabelList[i].emplace_back(p);
             ui->jValGridLayout->addWidget(p, i + 1, j + 1);
@@ -61,13 +61,13 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
     for (int i = 0; i < 6; ++i) {
         auto *p = new QDoubleSpinBox();
         ui->jControlLayout->addWidget(p, i + 1, 2);
-        p->setMinimumWidth(72);
-        p->setMaximumWidth(72);
-        p->setDecimals(1);
+        p->setMinimumWidth(96);
+        p->setMaximumWidth(96);
+        p->setDecimals(2);
         p->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         // TODO: set joint limit
-        p->setMaximum(180);
-        p->setMinimum(-180);
+        p->setMaximum(360);
+        p->setMinimum(-360);
 //        p->setMinimumHeight(24);
 //        p->setMinimumWidth(36);
         jointMoveSpinList.emplace_back(p);
@@ -108,8 +108,8 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
 
     std::string ip;
     if (!ros::param::get("~" + prefix + "ip", ip)) {
-        ip = "192.168.0.101";
-        if (prefix == "right_") ip = "192.168.0.100";
+        ip = "192.168.0.132";
+        if (prefix == "right_") ip = "192.168.0.130";
     }
 
     ipEdit->setText(QString::fromStdString(ip));
@@ -119,11 +119,37 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
 
     updateRMConnection(nullptr, rm);
 
+    m_graspSrv = nh.advertiseService<qjaka_gui::GraspService::Request, qjaka_gui::GraspService::Response>(
+            m_prefix + "grasp_srv",
+            [&](qjaka_gui::GraspService::Request &req, qjaka_gui::GraspService::Response &resp) -> bool {
+                ros::Duration(0.05).sleep();
+                JointValue jVal{};
+                RobotStatus status;
+                tf2::Quaternion qua;
+                rm->get_robot_status(&status, qua);
+                for (int i = 0; i < 6; ++i) {
+                    jVal.jVal[i] = status.joint_position[i];
+                }
+                if (jVal.jVal[5] >= (req.rotate_deg - 5) / 180.0 * M_PI) {
+                    jVal.jVal[5] = 0;
+                } else {
+                    jVal.jVal[5] = req.rotate_deg / 180.0 * M_PI;
+                }
+                rm->set_spin_speed(req.rotate_deg_speed / 180.0 * M_PI);
+                auto res = rm->joint_move_sync(&jVal, ABS);
+                if (res != ERR_SUCC) {
+                    resp.success = false;
+                    resp.desc = ErrorDescFactory::build()->getErrorDesc(res);
+                } else {
+                    resp.success = true;
+                    resp.desc = "";
+                }
+                return true;
+            });
+
     m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
             m_prefix + "trajectory_srv",
             [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
-                // init
-                resp.success = true;
                 // print info
                 {
                     std::lock_guard<std::mutex> lock(printMutex);
@@ -142,25 +168,19 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                     }
                     tp.PrintFooter();
                 }
+                if (req.joint_values.size() < 6) {
+                    resp.success = true;
+                    resp.desc = "轨迹点少于1个";
+                    return true;
+                }
                 // exec
                 errno_t res;
-//                if (m_prefix == "right_") {
-//                    rm->set_do(req.left_ee_do_index, req.left_ee_open_at_start);
-//                    rm->set_do(req.right_ee_do_index, req.right_ee_open_at_start);
-//                }
-                if (rm->is_own_virtual()) {
-                    res = rm->trajectory_move(req.trajectory);
-                } else {
-                    res = rm->trajectory_move_v2(req.joint_values, req.step_num, req.max_buf, req.kp, req.kv, req.ka);
-                }
+                res = rm->trajectory_move_v2(req.joint_values, req.step_num, req.max_buf, req.kp, req.kv, req.ka);
                 if (res != ERR_SUCC) {
                     resp.success = false;
                     resp.desc = ErrorDescFactory::build()->getErrorDesc(res);
                 } else {
-//                    if (m_prefix == "right_") {
-//                        rm->set_do(req.left_ee_do_index, req.left_ee_open_at_end);
-//                        rm->set_do(req.right_ee_do_index, req.right_ee_open_at_end);
-//                    }
+                    resp.success = true;
                 }
                 // finish
                 std::cout << "exec trajectory finished" << std::endl;
@@ -520,8 +540,9 @@ void SubWindow::updateRMConnection(RobotManager *old, RobotManager *cur) {
 }
 
 void SubWindow::on_collisionLevelComboBox_currentIndexChanged(int index) {
-    if (index > 0 && index < 6) rm->set_collision_level(index);
+    if (index >= 0 && index < 6) rm->set_collision_level(index);
     else showErrorBox("SubWindow::on_collisionLevelComboBox_currentIndexChanged", ERR_INVALID_PARAMETER);
+    qDebug() << index;
     QTimer::singleShot(200, this, [&]() {
         rm->get_collision_level();
         qDebug() << "collision level updated";
@@ -529,7 +550,7 @@ void SubWindow::on_collisionLevelComboBox_currentIndexChanged(int index) {
 }
 
 void SubWindow::onUpdateCollisionLevel(int level) {
-    level = (level > 0 && level < 6) ? level : 6;
+    level = (level >= 0 && level < 6) ? level : 6;
     ui->collisionLevelComboBox->setCurrentIndex(level);
 }
 

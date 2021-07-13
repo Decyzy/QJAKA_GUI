@@ -95,6 +95,7 @@ private:
     std::string m_prefix;
 
     ros::ServiceServer m_trajectorySrv;
+    ros::ServiceServer m_graspSrv;
 
     QLabel *motionControlLabel;
 

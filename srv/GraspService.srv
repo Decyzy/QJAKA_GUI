@@ -1,0 +1,5 @@
+float64 rotate_deg_speed
+float64 rotate_deg
+---
+bool success
+string desc

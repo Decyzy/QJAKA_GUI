@@ -11,6 +11,8 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
     w->setLayout(layout);
     setCentralWidget(w);
     setStatusBar(mainStatusBar);
+    setMinimumHeight(580);
+    setMaximumHeight(580);
 
     subWindowList.emplace_back(new SubWindow(nh, w, "left_"));
     subWindowList.emplace_back(new SubWindow(nh, w, "right_"));
@@ -66,11 +68,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 resp.success = true;
                 t0 = std::thread([&]() {
                     errno_t res;
-                    if (subWindowList[0]->rm->is_own_virtual()) {
-                        res = subWindowList[0]->rm->trajectory_move(req.trajectory);
-                    } else {
-                        res = subWindowList[0]->rm->trajectory_move_v2(req.joint_values, req.step_num);
-                    }
+                    res = subWindowList[0]->rm->trajectory_move_v2(req.joint_values, req.step_num);
                     if (res != ERR_SUCC) {
                         subWindowList[1]->rm->motion_abort();
                         std::lock_guard<std::mutex> lock(respMutex);
@@ -81,11 +79,8 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
 
                 t1 = std::thread([&]() {
                     errno_t res;
-                    if (subWindowList[1]->rm->is_own_virtual()) {
-                        res = subWindowList[1]->rm->trajectory_move(req.trajectory);
-                    } else {
-                        res = subWindowList[1]->rm->trajectory_move_v2(req.joint_values, req.step_num);
-                    }
+
+                    res = subWindowList[1]->rm->trajectory_move_v2(req.joint_values, req.step_num);
                     if (res != ERR_SUCC) {
                         subWindowList[0]->rm->motion_abort();
                         std::lock_guard<std::mutex> lock(respMutex);

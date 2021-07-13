@@ -23,6 +23,7 @@
 #include <moveit_msgs/RobotTrajectory.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include "qjaka_gui/JointMoveService.h"
+#include "qjaka_gui/GraspService.h"
 
 #include "robot.hpp"
 
@@ -211,6 +212,7 @@ public:
                                               m_prefix(prefix) {
         m_pRobot = robot;
         m_pRobot->set_prefix(prefix);
+        m_pRobot->set_initial_status();
         m_preThread.startThread();
         m_execThread.startThread();
         m_emergencyThread.startThread();
@@ -336,98 +338,39 @@ public:
         }
     }
 
-    // 阻塞
-    errno_t trajectory_move(moveit_msgs::RobotTrajectory &trajectory) {
-        if (!m_pRobot->is_login()) {
-            emit addInfoSignal("cannot exec trajectory: robot is not login");
-            return ERR_CUSTOM_NOT_LOGIN;
-        }
-        if (m_execMutex.try_lock()) {
-            int count = 0;
-            errno_t res = ERR_SUCC;
-            int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
-                          m_rosPublisher.m_prefix == "right_") ? 6 : 0;
-            for (const auto &p:trajectory.joint_trajectory.points) {
-                JointValue jVal;
-                for (int i = 0; i < 6; ++i) {
-                    jVal.jVal[i] = p.positions[i + offset];
-                }
-                std::cout << m_rosPublisher.m_prefix << "robot is moving to " << count++ << std::endl;
-                res = m_pRobot->joint_move(&jVal, ABS);
-                if (res != ERR_SUCC) {
-                    break;
-                }
-            }
-            m_execMutex.unlock();
-            return res;
-        } else {
-            emit addInfoSignal("cannot exec trajectory: robot is moving");
-            return ERR_CUSTOM_IS_MOVING;
-        }
+    errno_t joint_move_sync(const JointValue *joint_pos, MoveMode move_mode) {
+        return m_pRobot->joint_move(joint_pos, move_mode);
     }
-
-    // 阻塞
-    errno_t trajectory_move_v2(moveit_msgs::RobotTrajectory &trajectory) {
-        if (!m_pRobot->is_login()) {
-            emit addInfoSignal("cannot exec trajectory: robot is not login");
-            return ERR_CUSTOM_NOT_LOGIN;
-        }
-        if (m_execMutex.try_lock()) {
-            int count = 0;
-            errno_t res = ERR_SUCC;
-            m_pRobot->servo_move_use_joint_MMF(20, 0.075, 0.1, 0.6);
-            res = m_pRobot->servo_move_enable(true);
-            if (res == ERR_SUCC) {
-                int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
-                              m_rosPublisher.m_prefix == "right_") ? 6 : 0;
-                const unsigned int step_num = 1;
-                std::vector<JointValue> jVals;
-
-                for (int i = 1; i < trajectory.joint_trajectory.points.size(); ++i) {
-                    auto &curP = trajectory.joint_trajectory.points[i];
-                    auto &prevP = trajectory.joint_trajectory.points[i - 1];
-                    double startTime = prevP.time_from_start.toSec();
-                    double endTime = curP.time_from_start.toSec();
-                    double ks[6]{};
-                    for (int j = 0; j < 6; j++) {
-                        ks[j] = (curP.positions[j + offset] - prevP.positions[j + offset]) /
-                                (curP.time_from_start.toSec() - prevP.time_from_start.toSec());
-                    }
-                    double curTime = startTime;
-                    while (curTime < endTime) {
-                        JointValue curJVal;
-                        for (int j = 0; j < 6; j++) {
-                            curJVal.jVal[j] = prevP.positions[j + offset] + ks[j] * (curTime - startTime);
-                        }
-                        jVals.emplace_back(curJVal);
-                        curTime += 0.008 * double(step_num);
-                    }
-                }
-                std::cout << "start move" << std::endl;
-                ros::Rate rate(1000.0 / 7.5 / double(step_num));
-                for (const auto &jVal:jVals) {
-                    res = m_pRobot->servo_j(&jVal, ABS, step_num);
-                    if (res != ERR_SUCC) {
-                        for (int j = 0; j < 6; j++)
-                            std::cout << jVal.jVal[j] << ", ";
-                        std::cout << std::endl;
-                        emit errorSignal("servo_j", res);
-                        break;
-                    }
-                    rate.sleep();
-                }
-            } else {
-                emit errorSignal("servo_move_enable(true)", res);
-            }
-            res = m_pRobot->servo_move_enable(false);
-            emit errorSignal("servo_move_enable(false)", res);
-            m_execMutex.unlock();
-            return res;
-        } else {
-            emit addInfoSignal("cannot exec trajectory: robot is moving");
-            return ERR_CUSTOM_IS_MOVING;
-        }
-    }
+//
+//    // 阻塞
+//    errno_t trajectory_move(moveit_msgs::RobotTrajectory &trajectory) {
+//        if (!m_pRobot->is_login()) {
+//            emit addInfoSignal("cannot exec trajectory: robot is not login");
+//            return ERR_CUSTOM_NOT_LOGIN;
+//        }
+//        if (m_execMutex.try_lock()) {
+//            int count = 0;
+//            errno_t res = ERR_SUCC;
+//            int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
+//                          m_rosPublisher.m_prefix == "right_") ? 6 : 0;
+//            for (const auto &p:trajectory.joint_trajectory.points) {
+//                JointValue jVal;
+//                for (int i = 0; i < 6; ++i) {
+//                    jVal.jVal[i] = p.positions[i + offset];
+//                }
+//                std::cout << m_rosPublisher.m_prefix << "robot is moving to " << count++ << std::endl;
+//                res = m_pRobot->joint_move(&jVal, ABS);
+//                if (res != ERR_SUCC) {
+//                    break;
+//                }
+//            }
+//            m_execMutex.unlock();
+//            return res;
+//        } else {
+//            emit addInfoSignal("cannot exec trajectory: robot is moving");
+//            return ERR_CUSTOM_IS_MOVING;
+//        }
+//    }
 
     // 阻塞
     /**
@@ -448,39 +391,60 @@ public:
             return ERR_CUSTOM_NOT_LOGIN;
         }
         if (m_execMutex.try_lock()) {
+            // check trajectory
+            if (!is_own_virtual()) {
+                std::lock_guard<std::mutex> lock(m_getStatusMutex);
+                for (int i = 0; i < 5; ++i) {
+                    if (std::fabs(m_status.joint_position[i] - jVals[i]) > 0.1) {
+                        m_execMutex.unlock();
+                        return ERR_CUSTOM_INVALID_TRAJECTORY;
+                    }
+                }
+            }
+            double j6_val = m_status.joint_position[5];
+            // move
             errno_t res = ERR_SUCC;
-            res = m_pRobot->servo_move_use_joint_MMF(max_buf, 0.05, 0.1, 0.5);
+            res = m_pRobot->servo_move_use_joint_MMF(max_buf, kp, kv, ka);
             emit errorSignal("servo_move_use_joint_MMF", res);
-
             res = m_pRobot->servo_move_enable(true);
             if (res == ERR_SUCC) {
                 std::cout << "start move" << std::endl;
-                ros::Rate rate(1000.0 / 7.6 / double(step_num));
                 int i = 0;
                 JointValue _jVal;
+                int batch = is_own_virtual() ? 1 : 100;  // 每轮跑 batch 组
+                double scale = is_own_virtual() ? 1.0 : 0.8;
+                ros::Rate rate(1000.0 / (8.0 * batch * scale * double(step_num)));
+                int count = 0;
                 while (i < jVals.size()) {
-                    _jVal.jVal[0] = jVals[i];
-                    _jVal.jVal[1] = jVals[i + 1];
-                    _jVal.jVal[2] = jVals[i + 2];
-                    _jVal.jVal[3] = jVals[i + 3];
-                    _jVal.jVal[4] = jVals[i + 4];
-                    _jVal.jVal[5] = jVals[i + 5];
+                    for (int j = 0; j < 5; ++j) {
+                        _jVal.jVal[j] = jVals[i + j];
+                    }
+                    _jVal.jVal[5] = j6_val;
                     i += 6;
                     res = m_pRobot->servo_j(&_jVal, ABS, step_num);
                     if (res != ERR_SUCC) {
-                        for (int j = 0; j < 6; j++)
-                            std::cout << _jVal.jVal[j] << ", ";
+                        for (double j : _jVal.jVal)
+                            std::cout << j << ", ";
                         std::cout << std::endl;
                         emit errorSignal("servo_j", res);
                         break;
                     }
-                    rate.sleep();
+                    if (++count == batch) {
+                        rate.sleep();
+                        count = 0;
+                    }
                 }
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
             } else {
                 emit errorSignal("servo_move_enable(true)", res);
             }
-            res = m_pRobot->servo_move_enable(false);
-            emit errorSignal("servo_move_enable(false)", res);
+            if (res == ERR_SUCC) {
+                res = m_pRobot->servo_move_enable(false);
+                emit errorSignal("servo_move_enable(false)", res);
+            }
+
+//            res = m_pRobot->motion_abort();
+//            emit errorSignal("motion_abort", res);
             m_execMutex.unlock();
             return res;
         } else {

@@ -17,7 +17,7 @@
 #define ERR_CUSTOM_IS_MOVING 404
 #define ERR_CUSTOM_RECV_ABORT 500
 #define ERR_CUSTOM_NOT_LOGIN 501
-
+#define ERR_CUSTOM_INVALID_TRAJECTORY 503
 
 class ErrorDescFactory {
 public:
@@ -42,6 +42,8 @@ public:
         errorDescMap[ERR_CUSTOM_IS_MOVING] = "正在运动中";
         errorDescMap[ERR_CUSTOM_RECV_ABORT] = "被手动停止运动";
         errorDescMap[ERR_CUSTOM_NOT_LOGIN] = "没有登录";
+        errorDescMap[ERR_CUSTOM_INVALID_TRAJECTORY] = "轨迹无效, 跳跃的起始点";
+
     }
 
     static ErrorDescFactory* build() {

@@ -102,6 +102,7 @@ add_service_files(
     JointMoveService.srv
     DualRobotJointMoveService.srv
     DigitalOutputService.srv
+    GraspService.srv
 )
 
 ## Generate actions in the 'action' folder
