@@ -27,7 +27,8 @@ class VirtualRobot {
 
 protected:
     std::atomic_bool m_isLogin;
-    double m_radPerSecond = 5 / 180.0 * M_PI;
+    double m_radPerSecond = 20 / 180.0 * M_PI;
+    double m_radPerSecondPerSecond = 90 / 180.0 * M_PI;
 
 private:
     std::mutex m_mutex;
@@ -163,9 +164,10 @@ public:
         return ERR_SUCC;
     }
 
-    void set_spin_speed(double radPerSpeed) {
+    void set_spin_vel_and_acc(double radPerSecond, double radPerSecondPerSecond) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_radPerSecond = radPerSpeed;
+        m_radPerSecond = radPerSecond;
+        m_radPerSecondPerSecond = radPerSecondPerSecond;
     }
 
     virtual errno_t set_rapidrate(double rapid) {
@@ -378,8 +380,8 @@ public:
     }
 
     errno_t joint_move(const JointValue *joint_pos, MoveMode move_mode) override {
-        return m_robot.joint_move(joint_pos, move_mode, TRUE, m_radPerSecond, 360.0 / 180.0 * M_PI, 1.0 / 180.0 * M_PI,
-                                  nullptr);
+        return m_robot.joint_move(joint_pos, move_mode, TRUE, m_radPerSecond, m_radPerSecondPerSecond,
+                                  1.0 / 180.0 * M_PI, nullptr);
     }
 
     errno_t servo_move_enable(bool enable) override {

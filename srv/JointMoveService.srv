@@ -1,5 +1,5 @@
 Header header
-moveit_msgs/RobotTrajectory trajectory
+#moveit_msgs/RobotTrajectory trajectory
 float64[] joint_values
 int32 max_buf
 float64 kp

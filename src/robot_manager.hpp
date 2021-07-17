@@ -319,8 +319,8 @@ public:
         }
     }
 
-    void set_spin_speed(double radPerSpeed) {
-        m_pRobot->set_spin_speed(radPerSpeed);
+    void set_spin_vel_and_acc(double radPerSecond, double accPerSecondPerSecond) {
+        m_pRobot->set_spin_vel_and_acc(radPerSecond, accPerSecondPerSecond);
     }
 
     void joint_move(const JointValue *joint_pos, MoveMode move_mode) {

@@ -71,6 +71,12 @@ roslaunch qjaka_gui test_trajectory.launch
 
 ### 关于`ROS`
 
+#### Param
+
+`prefix` 硬编码为 `left_` 和 `right_`
+
+- `left_ip`，`right_ip`：设置机械臂的默认 IP
+
 #### Topic
 
 - `jaka_joint_states`
@@ -81,19 +87,29 @@ roslaunch qjaka_gui test_trajectory.launch
 
 #### Service
 
-- `jaka_trajectory_srv`（**！！修改中**）
+- `<prefix>trajectory_srv`
 
-  - Type：见`srv/JointMoveService.srv`，
+  - Type：见 `srv/JointMoveService.srv`
+
+  - Desc：其中 `joint_values` 为 6 关节数据拍平后一维数组，即每6个数据代表一个关节坐标。内部调用机器人的伺服运动接口。滤波器参数参考：
 
     ```
-    Header header
-    std_msgs/String prefix  
-    moveit_msgs/RobotTrajectory trajectory
-    ---
-    bool success
-    std_msgs/String left_desc
-    std_msgs/String right_desc
+    * @param step_num 1
+    * @param max_buf 20
+    * @param kp 0.1, 0.05 ~ 0.3
+    * @param kv 0.2, 0.1 ~ 0.5
+    * @param ka 0.6, 0.5 ~ 0.9
     ```
 
-  - Desc：接受带`moveit_msgs::RobotTrajectory`的请求，内部依次调用机器人的`joint_move`接口。
+- `digital_output_srv`
+
+  - Type：见 `srv/DigitalOutputService.srv`
+  - Desc：设置机械臂控制柜的数字输出。硬编码为右机械臂的控制柜。
+
+- `<prefix>grasp_srv`
+
+  - Type：见 `srv/GraspService.srv`
+  - Desc：执行抓取动作，末端关节按指定参数旋转
+
+  
 

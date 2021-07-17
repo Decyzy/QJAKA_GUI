@@ -11,8 +11,11 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
     w->setLayout(layout);
     setCentralWidget(w);
     setStatusBar(mainStatusBar);
-    setMinimumHeight(580);
-    setMaximumHeight(580);
+    setMinimumHeight(490);
+    setMaximumHeight(490);
+    setMaximumWidth(1450);
+    setMinimumWidth(1450);
+
 
     subWindowList.emplace_back(new SubWindow(nh, w, "left_"));
     subWindowList.emplace_back(new SubWindow(nh, w, "right_"));
@@ -37,12 +40,12 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 std::cout << "recv do request" << std::endl;
                 RobotManager *rm = subWindowList[1]->rm;
                 rm->set_do(req.index, req.enable);
-
                 resp.success = true;
                 resp.desc = "";
                 return true;
             });
 
+    /*
     m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
             "dual_trajectory_srv",
             [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
@@ -96,6 +99,7 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 std::cout << "exec trajectory finished" << std::endl;
                 return true;
             });
+    */
     spinner.start();
 }
 

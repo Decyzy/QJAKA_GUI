@@ -100,7 +100,6 @@ set(PROJECT_SOURCES
 add_service_files(
     FILES
     JointMoveService.srv
-    DualRobotJointMoveService.srv
     DigitalOutputService.srv
     GraspService.srv
 )

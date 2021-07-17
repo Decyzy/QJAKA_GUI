@@ -114,7 +114,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
 
     ipEdit->setText(QString::fromStdString(ip));
     ui->typeLabel->setText(QString::fromStdString(prefix));
-    rm->set_spin_speed(ui->velocitySpinBox->value() / 180.0 * M_PI);
+    rm->set_spin_vel_and_acc(ui->velocitySpinBox->value() / 180.0 * M_PI, ui->accSpinBox->value() / 180.0 * M_PI);
     ui->robotCheckBox->setChecked(true);
 
     updateRMConnection(nullptr, rm);
@@ -135,7 +135,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                 } else {
                     jVal.jVal[5] = req.rotate_deg / 180.0 * M_PI;
                 }
-                rm->set_spin_speed(req.rotate_deg_speed / 180.0 * M_PI);
+                rm->set_spin_vel_and_acc(req.rotate_vel_deg / 180.0 * M_PI, req.rotate_acc_deg / 180.0 * M_PI);
                 auto res = rm->joint_move_sync(&jVal, ABS);
                 if (res != ERR_SUCC) {
                     resp.success = false;
@@ -154,23 +154,23 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                 {
                     std::lock_guard<std::mutex> lock(printMutex);
                     std::cout << "recv " << m_prefix << "trajectory" << std::endl;
-                    bprinter::TablePrinter tp(&std::cout);
-                    tp.AddColumn("", 4);
-                    for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
-                        tp.AddColumn(joint_name, 13);
-                    }
-                    tp.PrintHeader();
-                    for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
-                        auto &p = req.trajectory.joint_trajectory.points[i];
-                        tp << i;
-                        for (double position : p.positions)
-                            tp << int(position / M_PI * 180.0 * 10) / 10.0;
-                    }
-                    tp.PrintFooter();
+//                    bprinter::TablePrinter tp(&std::cout);
+//                    tp.AddColumn("", 4);
+//                    for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
+//                        tp.AddColumn(joint_name, 13);
+//                    }
+//                    tp.PrintHeader();
+//                    for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
+//                        auto &p = req.trajectory.joint_trajectory.points[i];
+//                        tp << i;
+//                        for (double position : p.positions)
+//                            tp << int(position / M_PI * 180.0 * 10) / 10.0;
+//                    }
+//                    tp.PrintFooter();
                 }
                 if (req.joint_values.size() < 6) {
                     resp.success = true;
-                    resp.desc = "轨迹点少于1个";
+                    resp.desc = "轨迹点少于1个, 不移动";
                     return true;
                 }
                 // exec
@@ -181,6 +181,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
                     resp.desc = ErrorDescFactory::build()->getErrorDesc(res);
                 } else {
                     resp.success = true;
+                    resp.desc = "执行完毕";
                 }
                 // finish
                 std::cout << "exec trajectory finished" << std::endl;
@@ -460,7 +461,7 @@ void SubWindow::onJointMoveBtClicked(int index) {
 //        std::cout << val << ",";
 //    }
 //    std::cout << std::endl;
-    rm->set_spin_speed(ui->velocitySpinBox->value() / 180.0 * M_PI);
+    rm->set_spin_vel_and_acc(ui->velocitySpinBox->value() / 180.0 * M_PI, ui->accSpinBox->value() / 180.0 * M_PI);
     rm->joint_move(&jVal, INCR);
 }
 
@@ -474,7 +475,7 @@ void SubWindow::on_setCurrentBt_clicked() {
 
 void SubWindow::on_goBt_clicked() {
     JointValue jVal{};
-    rm->set_spin_speed(ui->velocitySpinBox->value() / 180.0 * M_PI);
+    rm->set_spin_vel_and_acc(ui->velocitySpinBox->value() / 180.0 * M_PI, ui->accSpinBox->value() / 180.0 * M_PI);
     for (int i = 0; i < 6; ++i) {
         jVal.jVal[i] = jointMoveSpinList[i]->value() / 180.0 * M_PI;
     }

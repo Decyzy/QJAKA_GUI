@@ -1,4 +1,5 @@
-float64 rotate_deg_speed
+float64 rotate_vel_deg
+float64 rotate_acc_deg
 float64 rotate_deg
 ---
 bool success
