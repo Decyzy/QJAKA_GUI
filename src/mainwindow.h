@@ -7,7 +7,6 @@
 
 #include "subwindow.h"
 #include <QStatusBar>
-#include "qjaka_gui/DualRobotJointMoveService.h"
 #include "qjaka_gui/DigitalOutputService.h"
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>

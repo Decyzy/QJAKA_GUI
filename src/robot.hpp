@@ -112,9 +112,9 @@ public:
     }
 
     void set_initial_status() {
-        double jVal[6] = {-100.0, 150, -140, 180, 90, 0.0};
+        double jVal[6] = {-90.0, 90, -50, 200, 170, 0.0};  // left
         if (m_prefix == "right_") {
-            double temp[6] = {120.0, 10, 140, 0, -100, 0.0};
+            double temp[6] = {90.0, 90.0, 60, -30, -170, 0.0};  // right
             memcpy(jVal, temp, sizeof(jVal));
         }
         for (int i = 0; i < 6; ++i) {
@@ -223,9 +223,9 @@ public:
         if (m_isMoving.load()) return ERR_CUSTOM_IS_MOVING;
         auto t = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::high_resolution_clock::now() - m_lastServoMove).count();
-        if (8 > t) {
-            sleepMilliseconds(8 - t);
-        }
+//        if (8 > t) {
+//            sleepMilliseconds(8 - t);
+//        }
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             for (int i = 0; i < 6; ++i) {
