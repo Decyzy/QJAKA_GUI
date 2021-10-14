@@ -16,7 +16,6 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
     setMaximumWidth(1450);
     setMinimumWidth(1450);
 
-
     subWindowList.emplace_back(new SubWindow(nh, w, "left_"));
     subWindowList.emplace_back(new SubWindow(nh, w, "right_"));
 
