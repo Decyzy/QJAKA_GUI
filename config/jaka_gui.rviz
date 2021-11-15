@@ -12,7 +12,6 @@ Panels:
         - /Right EE Axes1
         - /Right Actual Axes1
         - /Left Actual Axes1
-        - /Left Actual Axes1/Status1
       Splitter Ratio: 0.5
     Tree Height: 628
   - Class: rviz/Selection
@@ -74,6 +73,11 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        left_gripper_base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         left_link_1:
           Alpha: 1
           Show Axes: false
@@ -104,7 +108,17 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        platform:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
         right_base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        right_gripper_base_link:
           Alpha: 1
           Show Axes: false
           Show Trail: false
@@ -151,15 +165,15 @@ Visualization Manager:
       Length: 0.30000001192092896
       Name: Left EE Axes
       Radius: 0.009999999776482582
-      Reference Frame: left_ee
+      Reference Frame: left_gripper_base_link
       Value: true
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
       Length: 0.30000001192092896
       Name: Right EE Axes
-      Radius: 0.004999999888241291
-      Reference Frame: right_ee
+      Radius: 0.009999999776482582
+      Reference Frame: right_gripper_base_link
       Value: true
     - Alpha: 0.5
       Class: rviz/Axes
@@ -167,21 +181,21 @@ Visualization Manager:
       Length: 0.20000000298023224
       Name: Right Actual Axes
       Radius: 0.019999999552965164
-      Reference Frame: right_link_6
+      Reference Frame: right_real_ee_link
       Value: true
     - Alpha: 1
       Class: rviz/Axes
       Enabled: true
       Length: 0.20000000298023224
       Name: Left Actual Axes
-      Radius: 0.019999999552965164
-      Reference Frame: left_ee
+      Radius: 0.029999999329447746
+      Reference Frame: left_real_ee_link
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: right_base_link
+    Fixed Frame: platform
     Frame Rate: 30
   Name: root
   Tools:
@@ -205,7 +219,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 2.2700412273406982
+      Distance: 3.501497507095337
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -213,17 +227,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.11530600488185883
-        Y: -0.07866929471492767
-        Z: 0.09170335531234741
+        X: 0.23503944277763367
+        Y: 0.4335533380508423
+        Z: -0.25912579894065857
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.659796416759491
+      Pitch: 0.449796587228775
       Target Frame: <Fixed Frame>
-      Yaw: 5.9718170166015625
+      Yaw: 4.681823253631592
     Saved: ~
 Window Geometry:
   Displays:
@@ -242,4 +256,4 @@ Window Geometry:
     collapsed: false
   Width: 1656
   X: 1098
-  Y: 356
+  Y: 245

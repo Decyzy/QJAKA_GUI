@@ -1,7 +1,0 @@
-Header header
-std_msgs/String prefix
-moveit_msgs/RobotTrajectory trajectory
----
-bool success
-std_msgs/String left_desc
-std_msgs/String right_desc

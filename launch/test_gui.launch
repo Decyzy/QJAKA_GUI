@@ -1,0 +1,16 @@
+<launch>
+    <!-- 机械臂 begin ++++++++++++++++++++++++++++++++++++++++++++ -->
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find qjaka_gui)/urdf/jaka_dual.xacro"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find qjaka_gui)/config/jaka_gui.rviz" required="true"/>
+    <!--    qjaka_gui and 发布tf-->
+    <node pkg="qjaka_gui" type="qjaka_gui" name="qjaka_gui" output="screen" respawn="true" respawn_delay="0.5">
+        <param name="left_ip" value="192.168.0.132"/>
+        <param name="right_ip" value="192.168.0.130"/>
+    </node>
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+        <rosparam param="source_list">[/jaka_joint_states, /fake_jaka_joint_states]</rosparam>
+    </node>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="true"
+          output="screen"/>
+    <!-- 机械臂 end ++++++++++++++++++++++++++++++++++++++++++++ -->
+</launch>

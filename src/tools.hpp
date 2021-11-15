@@ -9,7 +9,6 @@
 #include <jkerr.h>
 #include <jktypes.h>
 #include <iostream>
-#include <bprinter/table_printer.h>
 #include <eigen3/Eigen/Geometry>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Quaternion.h>

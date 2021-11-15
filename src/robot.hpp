@@ -38,14 +38,14 @@ private:
     double m_startJointVal[6] = {};
     std::chrono::milliseconds m_duration{};
     std::atomic_bool m_isMoving;
+    std::atomic_bool m_isServo;
     std::atomic_bool m_isCurAbort;
     std::atomic_int m_collisionLevel;
     std::string m_prefix;
-    std::chrono::high_resolution_clock::time_point m_lastServoMove{};
 
 
     // !! 线程不安全, 使用前需要上锁
-    errno_t m_updateJointVal_unsafe() {
+    void m_updateJointVal_unsafe() {
         auto current = std::chrono::high_resolution_clock::now();
         if (current > m_endTime) {
             if (m_isMoving.load()) {
@@ -60,11 +60,6 @@ private:
                 m_status.joint_position[i] = m_targetJointVal[i] - (m_targetJointVal[i] - m_startJointVal[i]) * radio;
             }
         }
-        if (m_isCurAbort.load()) {
-            m_isCurAbort.exchange(false);
-            return ERR_CUSTOM_RECV_ABORT;
-        }
-        return ERR_SUCC;
     }
 
     tf2_ros::Buffer m_tfBuffer;
@@ -95,8 +90,9 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 
-    VirtualRobot() : m_isLogin(false), m_isMoving(false), m_isCurAbort(false),
+    VirtualRobot() : m_isLogin(false), m_isMoving(false), m_isServo(false), m_isCurAbort(false),
                      m_collisionLevel(1), m_duration(), m_tfListener(m_tfBuffer) {
+        m_endTime = std::chrono::high_resolution_clock::now();
     }
 
 //    ~VirtualRobot() {}
@@ -117,6 +113,7 @@ public:
             double temp[6] = {90.0, 90.0, 60, -30, -170, 0.0};  // right
             memcpy(jVal, temp, sizeof(jVal));
         }
+        std::lock_guard<std::mutex> lock(m_mutex);
         for (int i = 0; i < 6; ++i) {
             m_status.joint_position[i] = jVal[i] / 180.0 * M_PI;
         }
@@ -178,13 +175,15 @@ public:
 
 
     virtual errno_t joint_move(const JointValue *joint_pos, MoveMode move_mode) {
-        if (m_isMoving.load()) return ERR_CUSTOM_IS_MOVING;
+        if (m_isMoving.load() || m_isServo.load()) return ERR_CUSTOM_IS_MOVING;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_status.emergency_stop) return ERR_EMERGENCY_PRESSED;
+            if (m_isMoving.load() || m_isServo.load()) return ERR_CUSTOM_IS_MOVING;
+
+            else if (m_status.emergency_stop) return ERR_EMERGENCY_PRESSED;
             else if (!m_status.powered_on) return ERR_NOT_POWERED;
             else if (!m_status.enabled) return ERR_NOT_ENABLED;
-
+            m_isCurAbort.exchange(false);
             m_isMoving.exchange(true);
 
             double maxDeltaRad = 0;
@@ -219,31 +218,37 @@ public:
         return ERR_SUCC;
     }
 
-    virtual errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) {
-        if (m_isMoving.load()) return ERR_CUSTOM_IS_MOVING;
-        auto t = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::high_resolution_clock::now() - m_lastServoMove).count();
-//        if (8 > t) {
-//            sleepMilliseconds(8 - t);
-//        }
+    virtual errno_t servo_trajectory(const std::vector<double> &jVals, unsigned int step_num, double j6val) {
+        if (m_isMoving.load() || m_isServo.load()) return ERR_CUSTOM_IS_MOVING;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            for (int i = 0; i < 6; ++i) {
-                if (move_mode == INCR) {
-                    m_status.joint_position[i] += joint_pos->jVal[i];
-                } else {
-                    m_status.joint_position[i] = joint_pos->jVal[i];
-                }
-            }
-            m_lastServoMove = std::chrono::high_resolution_clock::now();
+            if (m_isMoving.load() || m_isServo.load()) return ERR_CUSTOM_IS_MOVING;
+            else if (m_status.emergency_stop) return ERR_EMERGENCY_PRESSED;
+            else if (!m_status.powered_on) return ERR_NOT_POWERED;
+            else if (!m_status.enabled) return ERR_NOT_ENABLED;
         }
+        m_isServo.exchange(true);
+        m_isCurAbort.exchange(false);
+
+        int idx = 0;
+        ros::Rate r(int(1000 / 8.0 / step_num));
+        while (idx < jVals.size() && !m_isCurAbort.load()) {
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                for (int i = 0; i < 5; ++i) {
+                    m_status.joint_position[i] = jVals.at(idx + i);
+                }
+                m_status.joint_position[5] = j6val;
+            }
+            idx += 6;
+            r.sleep();
+        }
+        m_isServo.exchange(false);
         return m_isCurAbort.load() ? ERR_CUSTOM_RECV_ABORT : ERR_SUCC;
     }
 
     virtual errno_t motion_abort() {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_updateJointVal_unsafe();
-        if (m_isMoving.load()) {
+        if (m_isMoving.load() || m_isServo.load()) {
             m_endTime = std::chrono::high_resolution_clock::now();
             m_isMoving.exchange(false);
             m_isCurAbort.exchange(true);
@@ -301,32 +306,6 @@ public:
     RealRobot() {
         char version[1024];
         m_robot.get_sdk_version(version);
-//        double pose[6];
-//        pose[3] = -1.2;
-//        pose[4] = 0.43;
-//        pose[5] = 0.771;
-//        Eigen::Vector3d eulerAngle(pose[3], pose[4], pose[5]);
-//        Eigen::AngleAxisd rollAngle(Eigen::AngleAxisd(eulerAngle(0), Eigen::Vector3d::UnitX()));
-//        Eigen::AngleAxisd pitchAngle(Eigen::AngleAxisd(eulerAngle(1), Eigen::Vector3d::UnitY()));
-//        Eigen::AngleAxisd yawAngle(Eigen::AngleAxisd(eulerAngle(2), Eigen::Vector3d::UnitZ()));
-//        Eigen::Quaterniond quaternion;
-//        quaternion = yawAngle * pitchAngle * rollAngle;
-//
-//        Rpy rpy;
-//        RotMatrix rot_matrix;
-//        Quaternion qua;
-//        rpy.rx = pose[3];
-//        rpy.ry = pose[4];
-//        rpy.rz = pose[5];
-//        m_robot.rpy_to_rot_matrix(&rpy, &rot_matrix);
-//        m_robot.rot_matrix_to_quaternion(&rot_matrix, &qua);
-//        qDebug() << qua.x << ", " << qua.y << ", " << qua.z << ", " << qua.s;
-//        qDebug() << quaternion.x() << ", " << quaternion.y() << ", " << quaternion.z() << ", " << quaternion.w();
-//
-//        Eigen::Vector3d angle = quaternion.matrix().eulerAngles(2, 1, 0);
-//        qDebug() << angle(2) << ", " << angle(1) << "" << angle(0);
-
-
         std::cout << "jaka sdk version: " << version << std::endl;
     }
 
@@ -392,8 +371,31 @@ public:
         return m_robot.servo_move_use_joint_MMF(max_buf, kp, kv, ka);
     }
 
-    errno_t servo_j(const JointValue *joint_pos, MoveMode move_mode, unsigned int step_num) override {
-        return m_robot.servo_j(joint_pos, move_mode, step_num);
+    errno_t servo_trajectory(const std::vector<double> &jVals, unsigned int step_num, double j6val) override {
+        int i = 0;
+        JointValue _jVal;
+        int batch = 200;  // 每轮跑 batch 组
+        int count = 0;
+        ros::Rate rate(1000.0 / (8.0 * batch * double(step_num)));
+        ros::Rate clock(1000.0 / (8.0 * double(jVals.size() * step_num) / 6.0));
+        while (i < jVals.size()) {
+            for (int j = 0; j < 5; ++j) {
+                _jVal.jVal[j] = jVals[i + j];
+            }
+            _jVal.jVal[5] = j6val;
+            i += 6;
+            errno_t res = m_robot.servo_j(&_jVal, ABS, step_num);
+            if (res != ERR_SUCC) {
+                return res;
+            }
+            if (++count == batch) {
+                rate.sleep();
+                count = 0;
+            }
+        }
+        clock.sleep();
+        sleepMilliseconds(200);
+        return ERR_SUCC;
     }
 
     errno_t motion_abort() override {

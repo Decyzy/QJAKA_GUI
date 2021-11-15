@@ -1,0 +1,14 @@
+Header header
+float64[] left_joint_values   # 6个关节值拍平后的一维数组, 每6个数组为一组关节坐标, 单位rad
+float64[] right_joint_values  # 6个关节值拍平后的一维数组, 每6个数组为一组关节坐标, 单位rad
+int32 max_buf   # 均值滤波器缓冲区的大小, 一般取20
+float64 kp      # 加速度滤波系数, 0.05 ~ 0.3, 一般取0.1,
+float64 kv      # 速度滤波系数, 0.1 ~ 0.5, 一般取0.2
+float64 ka      # 位置滤波系数, 0.5 ~ 0.9, 一般取0.6
+uint8 step_num  # 倍分周期, 运动周期为 step_num * 8ms, 一般取1
+bool enable_left   # 左机械臂是否运动, 如果是false, 则忽略`left_joint_values`并保持不动
+bool enable_right  # 右机械臂是否运动, 如果是false, 则忽略`right_joint_values`并保持不动
+---
+bool success
+string left_desc   # 含中文, python需要编解码: msg.desc.encode().decode()
+string right_desc  # 同上
