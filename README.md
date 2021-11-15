@@ -80,7 +80,11 @@ roslaunch qjaka_gui test_gui.launch
 - `<prefix>trajectory_srv`
 
   - Type：见 `srv/JointMoveService.srv`
+<<<<<<< HEAD
   - Desc：单机械臂运动。其中 `joint_values` 为 6 关节数据拍平后一维数组，即每6个数据代表一个关节坐标。内部调用机器人的伺服运动接口。
+=======
+  - Desc：单机械臂运动。其中 `joint_values` 为 6 关节数据拍平后一维数组，即每6个数据代表一个关节坐标。内部调用机器人的伺服运动接口。滤波器参数参考：
+>>>>>>> 0b55c7857d1fe4668fc5e5737f56faa1ddca5c27
 
 - `dual_trajectory_srv`
 
