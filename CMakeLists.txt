@@ -39,8 +39,8 @@ endif()
 find_package(Jaka REQUIRED)
 include_directories(${Jaka_INCLUDE_DIRS})
 
-find_package(bprinter REQUIRED)
-include_directories(${bprinter_INCLUDE_DIR})
+#find_package(bprinter REQUIRED)
+#include_directories(${bprinter_INCLUDE_DIR})
 
 set(PROJECT_SOURCES
     src/main.cpp
@@ -102,6 +102,7 @@ add_service_files(
     JointMoveService.srv
     DigitalOutputService.srv
     GraspService.srv
+    DualRobotJointMoveService.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -193,7 +194,7 @@ add_executable(qjaka_gui ${PROJECT_SOURCES})
 ## Specify libraries to link a library or executable target against
 
 target_link_libraries(qjaka_gui
-    ${catkin_LIBRARIES} Qt${QT_VERSION_MAJOR}::Widgets ${Jaka_LIBRARIES} Threads::Threads /usr/local/lib/libbprinter.a
+    ${catkin_LIBRARIES} Qt${QT_VERSION_MAJOR}::Widgets ${Jaka_LIBRARIES} Threads::Threads
 )
 
 #############

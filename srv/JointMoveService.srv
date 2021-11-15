@@ -1,17 +1,10 @@
 Header header
-#moveit_msgs/RobotTrajectory trajectory
-float64[] joint_values
-int32 max_buf
-float64 kp
-float64 kv
-float64 ka
-uint8 step_num
-#bool left_ee_open_at_start
-#bool left_ee_open_at_end
-#bool right_ee_open_at_start
-#bool right_ee_open_at_end
-#uint8 left_ee_do_index
-#uint8 right_ee_do_index
+float64[] joint_values  # 6个关节值拍平后的一维数组, 每6个数组为一组关节坐标, 单位rad
+int32 max_buf   # 均值滤波器缓冲区的大小, 一般取20
+float64 kp      # 加速度滤波系数, 0.05 ~ 0.3, 一般取0.1,
+float64 kv      # 速度滤波系数, 0.1 ~ 0.5, 一般取0.2
+float64 ka      # 位置滤波系数, 0.5 ~ 0.9, 一般取0.6
+uint8 step_num  # 倍分周期, 运动周期为 step_num * 8ms, 一般取1
 ---
 bool success
-string desc
+string desc  # 含中文, python需要编解码: msg.desc.encode().decode()

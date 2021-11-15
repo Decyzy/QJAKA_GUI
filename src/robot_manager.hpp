@@ -341,36 +341,6 @@ public:
     errno_t joint_move_sync(const JointValue *joint_pos, MoveMode move_mode) {
         return m_pRobot->joint_move(joint_pos, move_mode);
     }
-//
-//    // 阻塞
-//    errno_t trajectory_move(moveit_msgs::RobotTrajectory &trajectory) {
-//        if (!m_pRobot->is_login()) {
-//            emit addInfoSignal("cannot exec trajectory: robot is not login");
-//            return ERR_CUSTOM_NOT_LOGIN;
-//        }
-//        if (m_execMutex.try_lock()) {
-//            int count = 0;
-//            errno_t res = ERR_SUCC;
-//            int offset = (trajectory.joint_trajectory.points[0].positions.size() > 6 &&
-//                          m_rosPublisher.m_prefix == "right_") ? 6 : 0;
-//            for (const auto &p:trajectory.joint_trajectory.points) {
-//                JointValue jVal;
-//                for (int i = 0; i < 6; ++i) {
-//                    jVal.jVal[i] = p.positions[i + offset];
-//                }
-//                std::cout << m_rosPublisher.m_prefix << "robot is moving to " << count++ << std::endl;
-//                res = m_pRobot->joint_move(&jVal, ABS);
-//                if (res != ERR_SUCC) {
-//                    break;
-//                }
-//            }
-//            m_execMutex.unlock();
-//            return res;
-//        } else {
-//            emit addInfoSignal("cannot exec trajectory: robot is moving");
-//            return ERR_CUSTOM_IS_MOVING;
-//        }
-//    }
 
     // 阻塞
     /**
@@ -408,33 +378,8 @@ public:
             emit errorSignal("servo_move_use_joint_MMF", res);
             res = m_pRobot->servo_move_enable(true);
             if (res == ERR_SUCC) {
-                std::cout << "start move" << std::endl;
-                int i = 0;
-                JointValue _jVal;
-                int batch = is_own_virtual() ? 1 : 100;  // 每轮跑 batch 组
-                double scale = is_own_virtual() ? 1.0 : 0.8;
-                ros::Rate rate(1000.0 / (8.0 * batch * scale * double(step_num)));
-                int count = 0;
-                while (i < jVals.size()) {
-                    for (int j = 0; j < 5; ++j) {
-                        _jVal.jVal[j] = jVals[i + j];
-                    }
-                    _jVal.jVal[5] = j6_val;
-                    i += 6;
-                    res = m_pRobot->servo_j(&_jVal, ABS, step_num);
-                    if (res != ERR_SUCC) {
-                        for (double j : _jVal.jVal)
-                            std::cout << j << ", ";
-                        std::cout << std::endl;
-                        emit errorSignal("servo_j", res);
-                        break;
-                    }
-                    if (++count == batch) {
-                        rate.sleep();
-                        count = 0;
-                    }
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::cout << "start move " << jVals.size() << std::endl;
+                res = m_pRobot->servo_trajectory(jVals, step_num, j6_val);
             } else {
                 emit errorSignal("servo_move_enable(true)", res);
             }
@@ -442,9 +387,6 @@ public:
                 res = m_pRobot->servo_move_enable(false);
                 emit errorSignal("servo_move_enable(false)", res);
             }
-
-//            res = m_pRobot->motion_abort();
-//            emit errorSignal("motion_abort", res);
             m_execMutex.unlock();
             return res;
         } else {
@@ -518,6 +460,25 @@ public:
             emit busySignal("set_ee_open");
         }
     }
+
+    void set_do_sync(int index, bool enable) {
+        auto res = m_pRobot->set_do(index, enable);
+        emit errorSignal("set_do", res);
+    }
+
+//    void set_multi_do(std::vector<uint8_t> &index, std::vector<uint8_t> &enable) {
+//        if (!m_emergencyThread.addAsyncTask([&, index, enable]() {
+//            for (int i = 0; i < index.size(); ++i) {
+//                auto res = m_pRobot->set_do(index[i], enable[i] > 0);
+//                if (res != ERR_SUCC) {
+//                    emit errorSignal("set_do", res);
+//                    break;
+//                }
+//            }
+//        })) {
+//            emit busySignal("set_ee_open");
+//        }
+//    }
 };
 
 

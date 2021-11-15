@@ -151,23 +151,7 @@ SubWindow::SubWindow(ros::NodeHandle &nh,
             m_prefix + "trajectory_srv",
             [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
                 // print info
-                {
-                    std::lock_guard<std::mutex> lock(printMutex);
-                    std::cout << "recv " << m_prefix << "trajectory" << std::endl;
-//                    bprinter::TablePrinter tp(&std::cout);
-//                    tp.AddColumn("", 4);
-//                    for (const auto &joint_name: req.trajectory.joint_trajectory.joint_names) {
-//                        tp.AddColumn(joint_name, 13);
-//                    }
-//                    tp.PrintHeader();
-//                    for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
-//                        auto &p = req.trajectory.joint_trajectory.points[i];
-//                        tp << i;
-//                        for (double position : p.positions)
-//                            tp << int(position / M_PI * 180.0 * 10) / 10.0;
-//                    }
-//                    tp.PrintFooter();
-                }
+                std::cout << "recv " << m_prefix << "trajectory" << std::endl;
                 if (req.joint_values.size() < 6) {
                     resp.success = true;
                     resp.desc = "轨迹点少于1个, 不移动";

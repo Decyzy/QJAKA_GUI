@@ -8,18 +8,7 @@
 
 - ROS
 
-- [bprinter](https://github.com/dattanchu/bprinter)：终端表格打印
-
-  ```bash
-  cd ~/Opt  # 可随意
-  git clone https://github.com/dattanchu/bprinter.git
-  cd bprinter
-  mkdir build && cd build
-  cmake .. && make -j4
-  sudo make install
-  ```
-
-- jaka sdk：
+- jaka sdk （ 本仓库doc下）：
 
   - 修改`CmakeLists.txt`中的`set(Jaka_DIR "/home/msi/Opt/jaka_sdk")`（35行附近），修改为你的路径
 
@@ -30,22 +19,23 @@
     │   ├── JAKAZuRobot.h
     │   ├── jkerr.h
     │   └── jktypes.h
-    ├── JakaConfig.cmake  # 本仓库doc下
+    ├── JakaConfig.cmake
     └── lib
         ├── libjakaAPI.so
         └── libz.a
     ```
 
-- robot_model：本仓库doc下zip压缩包，包含urdf和moveit配置例子
-  - `Zu7/urdf/jaka_macro.xacro`：添加了macro `prefix`，用以区分左右机械臂；
-  - `Zu7/urdf/jaka_dual.xacro`：双臂；
-  - `Zu7/urdf/jaka.urdf.xacro`：官方文件，单机械臂；
-  - `dual_moveit_config`：使用moveit配置助手，基于`Zu7/urdf/jaka_dual.xacro`生成的。
+- robot_models：本仓库doc下zip压缩包，包含zu7 2.5版本和1.0版本urdf
+
+  - `zu7/urdf/jaka_macro.xacro`：添加了macro `prefix`，用以区分左右机械臂；
+  - `jaka_zu7_v2/urdf/jaka_zu7_v2.xacro`：添加了macro `prefix`，用以区分左右机械臂；
+  - `zu7/urdf/jaka.urdf.xacro`：官方文件，单机械臂；
+  - `qjaka_gui/urdf/jaka_dual.xacro`：双机械臂例子
 
 ## 测试
 
 ```bash
-roslaunch qjaka_gui test_trajectory.launch
+roslaunch qjaka_gui test_gui.launch
 ```
 
 ## 程序设计
@@ -71,9 +61,9 @@ roslaunch qjaka_gui test_trajectory.launch
 
 ### 关于`ROS`
 
-#### Param
+`prefix` 硬编码为 `left_` 或 `right_`
 
-`prefix` 硬编码为 `left_` 和 `right_`
+#### Param
 
 - `left_ip`，`right_ip`：设置机械臂的默认 IP
 
@@ -82,24 +72,20 @@ roslaunch qjaka_gui test_trajectory.launch
 - `jaka_joint_states`
   - Type：`sensor_msgs::JointState`
   - Desc：在login成功后，随着`getThread`的执行，机械臂关节信息也一并以固定频率发布
-- TF：`left_ee`，`right_ee`
-  - `left_joint_6`，`right_joint_6`在真机上的位姿。虚拟机器人上二者重合，真机上不重合（因机器人模型与真机的DH参数不同）
+- TF：`<prefix>gripper_base_link`
+  - `<prefix>gripper_base_link`在真机上的位姿。虚拟机器人上二者重合，真机上不重合（因机器人模型与真机的DH参数不同）
 
 #### Service
 
 - `<prefix>trajectory_srv`
 
   - Type：见 `srv/JointMoveService.srv`
+  - Desc：单机械臂运动。其中 `joint_values` 为 6 关节数据拍平后一维数组，即每6个数据代表一个关节坐标。内部调用机器人的伺服运动接口。滤波器参数参考：
 
-  - Desc：其中 `joint_values` 为 6 关节数据拍平后一维数组，即每6个数据代表一个关节坐标。内部调用机器人的伺服运动接口。滤波器参数参考：
+- `dual_trajectory_srv`
 
-    ```
-    * @param step_num 1
-    * @param max_buf 20
-    * @param kp 0.1, 0.05 ~ 0.3
-    * @param kv 0.2, 0.1 ~ 0.5
-    * @param ka 0.6, 0.5 ~ 0.9
-    ```
+  - Type：见 `srv/DualRobotJointMoveService.srv`
+  - Desc：双机械臂同步运动。
 
 - `digital_output_srv`
 

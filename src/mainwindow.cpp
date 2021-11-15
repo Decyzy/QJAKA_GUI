@@ -38,56 +38,50 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 qjaka_gui::DigitalOutputService::Response &resp) -> bool {
                 std::cout << "recv do request" << std::endl;
                 RobotManager *rm = subWindowList[1]->rm;
-                rm->set_do(req.index, req.enable);
+                for (int i = 0; i < req.index.size(); ++i) {
+                    rm->set_do_sync(req.index[i], req.enable[i] > 0);
+                }
                 resp.success = true;
                 resp.desc = "";
                 return true;
             });
 
-    /*
-    m_trajectorySrv = nh.advertiseService<qjaka_gui::JointMoveService::Request, qjaka_gui::JointMoveService::Response>(
+
+    m_trajectorySrv = nh.advertiseService<qjaka_gui::DualRobotJointMoveService::Request, qjaka_gui::DualRobotJointMoveService::Response>(
             "dual_trajectory_srv",
-            [&](qjaka_gui::JointMoveService::Request &req, qjaka_gui::JointMoveService::Response &resp) -> bool {
-                // print info
-                std::cout << "recv trajectory" << std::endl;
-                bprinter::TablePrinter tp(&std::cout);
-                tp.AddColumn("Joint Name", 14);
-                for (int i = 0; i < req.trajectory.joint_trajectory.points.size(); ++i) {
-                    tp.AddColumn(std::to_string(i), 8);
-                }
-                tp.PrintHeader();
-                for (int i = 0; i < req.trajectory.joint_trajectory.joint_names.size(); ++i) {
-                    tp << req.trajectory.joint_trajectory.joint_names[i];
-                    for (const auto &p:req.trajectory.joint_trajectory.points) {
-                        tp << int(p.positions[i] / M_PI * 180.0 * 10) / 10.0;
-                    }
-                }
-                tp.PrintFooter();
+            [&](qjaka_gui::DualRobotJointMoveService::Request &req,
+                qjaka_gui::DualRobotJointMoveService::Response &resp) -> bool {
+                std::cout << "recv dual trajectory" << std::endl;
                 // exec
                 std::mutex respMutex;
                 std::thread t0;
                 std::thread t1;
                 resp.success = true;
                 t0 = std::thread([&]() {
+                    if (!req.enable_left) {
+                        return;
+                    }
                     errno_t res;
-                    res = subWindowList[0]->rm->trajectory_move_v2(req.joint_values, req.step_num);
+                    res = subWindowList[0]->rm->trajectory_move_v2(req.left_joint_values, req.step_num);
                     if (res != ERR_SUCC) {
                         subWindowList[1]->rm->motion_abort();
                         std::lock_guard<std::mutex> lock(respMutex);
                         resp.success = false;
-                        resp.desc += "left:" + ErrorDescFactory::build()->getErrorDesc(res);
+                        resp.left_desc += "left:" + ErrorDescFactory::build()->getErrorDesc(res);
                     }
                 });
 
                 t1 = std::thread([&]() {
+                    if (!req.enable_right) {
+                        return;
+                    }
                     errno_t res;
-
-                    res = subWindowList[1]->rm->trajectory_move_v2(req.joint_values, req.step_num);
+                    res = subWindowList[1]->rm->trajectory_move_v2(req.right_joint_values, req.step_num);
                     if (res != ERR_SUCC) {
                         subWindowList[0]->rm->motion_abort();
                         std::lock_guard<std::mutex> lock(respMutex);
                         resp.success = false;
-                        resp.desc += "right:" + ErrorDescFactory::build()->getErrorDesc(res);
+                        resp.right_desc += "right:" + ErrorDescFactory::build()->getErrorDesc(res);
                     }
                 });
 
@@ -98,7 +92,6 @@ MainWindow::MainWindow(QMainWindow *parent) : QMainWindow(parent), spinner(4) {
                 std::cout << "exec trajectory finished" << std::endl;
                 return true;
             });
-    */
     spinner.start();
 }
 
@@ -109,7 +102,7 @@ void MainWindow::onTimeout() {
 
 
 MainWindow::~MainWindow() {
-    for (auto &p:subWindowList) {
+    for (auto &p: subWindowList) {
         delete p;
     }
     delete splitLine;
